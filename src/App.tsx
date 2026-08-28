@@ -9,6 +9,7 @@ import {
   requiredDaxSkills,
 } from './dax/learning'
 import type { DaxAttempt } from './dax/types'
+import { useDaxWebMcp } from './dax/useDaxWebMcp'
 
 function App() {
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0)
@@ -16,6 +17,8 @@ function App() {
   const [attempts, setAttempts] = useState<DaxAttempt[]>([])
   const [validationError, setValidationError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useDaxWebMcp({ currentExerciseIndex, attempts })
 
   const exercise = daxExercises[currentExerciseIndex]
   const currentExerciseAttempts = attempts.filter(
