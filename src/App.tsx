@@ -1,17 +1,40 @@
 import { type FormEvent, useRef, useState } from 'react'
 import './App.css'
 import { evaluateDaxPrediction } from './dax/evaluation'
-import { calculateFilterContextExercise as exercise } from './dax/exercise'
+import { daxExercises } from './dax/exercise'
+import {
+  deriveDaxLearningEvidence,
+  getDemonstratedDaxSkillIds,
+  isDaxMissionMastered,
+  requiredDaxSkills,
+} from './dax/learning'
 import type { DaxAttempt } from './dax/types'
 
 function App() {
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0)
   const [prediction, setPrediction] = useState('')
   const [attempts, setAttempts] = useState<DaxAttempt[]>([])
   const [validationError, setValidationError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const latestAttempt = attempts.at(-1)
-  const exerciseComplete = latestAttempt?.result === 'correct'
+  const exercise = daxExercises[currentExerciseIndex]
+  const currentExerciseAttempts = attempts.filter(
+    ({ exerciseId }) => exerciseId === exercise.id,
+  )
+  const latestAttempt = currentExerciseAttempts.at(-1)
+  const exerciseComplete = currentExerciseAttempts.some(
+    ({ result }) => result === 'correct',
+  )
+  const solvedExerciseIds = new Set(
+    attempts
+      .filter(({ result }) => result === 'correct')
+      .map(({ exerciseId }) => exerciseId),
+  )
+  const evidence = deriveDaxLearningEvidence(attempts)
+  const demonstratedSkillIds = getDemonstratedDaxSkillIds(evidence)
+  const missionMastered = isDaxMissionMastered(evidence)
+  const missionComplete =
+    missionMastered && solvedExerciseIds.size === daxExercises.length
 
   function submitPrediction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -42,6 +65,17 @@ function App() {
     }
   }
 
+  function advanceToNextExercise() {
+    if (!exerciseComplete || currentExerciseIndex === daxExercises.length - 1) {
+      return
+    }
+
+    setCurrentExerciseIndex((index) => index + 1)
+    setPrediction('')
+    setValidationError('')
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
   return (
     <main className="learning-shell">
       <header className="mission-header">
@@ -50,17 +84,74 @@ function App() {
           <h1>DAX CALCULATE &amp; Filter Context</h1>
         </div>
         <div className="exercise-id" aria-label={`Exercise ${exercise.id}`}>
-          <span>Exercise</span>
+          <span>
+            Exercise {currentExerciseIndex + 1} of {daxExercises.length}
+          </span>
           <strong>{exercise.id}</strong>
         </div>
       </header>
+
+      <section className="mission-overview" aria-label="Mission progress">
+        <div className="progress-summary">
+          <div>
+            <p className="eyebrow">Mission progress</p>
+            <strong>
+              {solvedExerciseIds.size} of {daxExercises.length} exercises solved
+            </strong>
+          </div>
+          <p className="skill-count">
+            <strong>{demonstratedSkillIds.size}</strong> of{' '}
+            {requiredDaxSkills.length} skills demonstrated
+            {demonstratedSkillIds.size === requiredDaxSkills.length &&
+              !missionMastered && <span>Transfer challenge remaining</span>}
+          </p>
+        </div>
+
+        <ol className="exercise-track" aria-label="Exercise sequence">
+          {daxExercises.map((missionExercise, index) => {
+            const isCurrent = index === currentExerciseIndex
+            const isSolved = solvedExerciseIds.has(missionExercise.id)
+            return (
+              <li
+                key={missionExercise.id}
+                className={isCurrent ? 'current' : isSolved ? 'solved' : ''}
+                aria-current={isCurrent ? 'step' : undefined}
+              >
+                <span>{isSolved ? '✓' : index + 1}</span>
+                <div>
+                  <strong>{missionExercise.id}</strong>
+                  <small>
+                    {isCurrent ? 'Current' : isSolved ? 'Solved' : 'Upcoming'}
+                  </small>
+                </div>
+              </li>
+            )
+          })}
+        </ol>
+
+        <ul className="skill-list" aria-label="Required DAX skills">
+          {requiredDaxSkills.map((skill) => {
+            const demonstrated = demonstratedSkillIds.has(skill.id)
+            return (
+              <li key={skill.id} className={demonstrated ? 'demonstrated' : ''}>
+                <span>{demonstrated ? '✓' : skill.id}</span>
+                <p>
+                  <strong>{skill.id}</strong>
+                  {skill.name}
+                </p>
+                <small>{demonstrated ? 'Demonstrated' : 'Not yet'}</small>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
 
       <section className="exercise-layout" aria-labelledby="challenge-title">
         <div className="source-column">
           <div className="section-heading">
             <span className="step-number">01</span>
             <div>
-              <p className="eyebrow">Inspect the context</p>
+              <p className="eyebrow">{exercise.stageLabel}</p>
               <h2 id="challenge-title">Read the data before you predict</h2>
             </div>
           </div>
@@ -72,18 +163,24 @@ function App() {
                 <strong>{exercise.datasetName}</strong>
               </div>
               <table>
-                <caption className="sr-only">Sales data for this exercise</caption>
+                <caption className="sr-only">
+                  {exercise.datasetName} data for {exercise.id}
+                </caption>
                 <thead>
                   <tr>
-                    <th scope="col">Region</th>
-                    <th scope="col">Amount</th>
+                    {exercise.dataColumns.map((column) => (
+                      <th scope="col" key={column.key}>
+                        {column.label}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {exercise.salesRows.map((row, index) => (
-                    <tr key={`${row.region}-${row.amount}-${index}`}>
-                      <td>{row.region}</td>
-                      <td>{row.amount}</td>
+                  {exercise.dataRows.map((row, rowIndex) => (
+                    <tr key={`${exercise.id}-row-${rowIndex}`}>
+                      {exercise.dataColumns.map((column) => (
+                        <td key={column.key}>{row[column.key]}</td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
@@ -92,10 +189,14 @@ function App() {
 
             <div className="filter-card">
               <p className="card-label">Current filter context</p>
-              <div className="filter-value">
-                <span>{exercise.filterContext.column}</span>
-                <span aria-hidden="true">=</span>
-                <strong>{exercise.filterContext.value}</strong>
+              <div className="filter-values">
+                {exercise.filterContext.map((filter) => (
+                  <div className="filter-value" key={filter.column}>
+                    <span>{filter.column}</span>
+                    <span aria-hidden="true">=</span>
+                    <strong>{filter.value}</strong>
+                  </div>
+                ))}
               </div>
               <p className="filter-note">Applied before the measure is evaluated</p>
             </div>
@@ -154,10 +255,7 @@ function App() {
             <section className="feedback incorrect" aria-live="polite">
               <p className="feedback-kicker">Incorrect prediction</p>
               <h3>Not quite—try the context again.</h3>
-              <p>
-                Re-check what <code>ALL(Sales[Region])</code> does to the existing
-                Region filter inside <code>CALCULATE</code>.
-              </p>
+              <p>{exercise.incorrectFeedback}</p>
             </section>
           )}
 
@@ -170,10 +268,50 @@ function App() {
                   <li key={step}>{step}</li>
                 ))}
               </ol>
+              <div className="evidence-earned">
+                <span>Evidence recorded</span>
+                <strong>{exercise.skillIds.join(' · ')}</strong>
+              </div>
               <div className="result-line">
                 <span>Result</span>
                 <strong>{exercise.expectedAnswer}</strong>
               </div>
+            </section>
+          )}
+
+          {exerciseComplete && currentExerciseIndex < daxExercises.length - 1 && (
+            <button
+              type="button"
+              className="next-exercise"
+              onClick={advanceToNextExercise}
+            >
+              Continue to exercise {currentExerciseIndex + 2}
+              <span aria-hidden="true">→</span>
+            </button>
+          )}
+
+          {missionComplete && (
+            <section
+              className="mastery-complete"
+              aria-labelledby="mastery-title"
+            >
+              <p className="feedback-kicker">Mission complete</p>
+              <h2 id="mastery-title">Mastery demonstrated</h2>
+              <p>
+                You demonstrated all required CALCULATE &amp; Filter Context skills
+                through evaluated attempts.
+              </p>
+              <ul aria-label="Mastery evidence summary">
+                {requiredDaxSkills.map((skill) => (
+                  <li key={skill.id}>
+                    <span>✓</span>
+                    <p>
+                      <strong>{skill.id}</strong>
+                      {skill.name}
+                    </p>
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
 
@@ -189,7 +327,10 @@ function App() {
               <ol>
                 {attempts.map((attempt) => (
                   <li key={attempt.id}>
-                    <span>Attempt #{attempt.sequenceNumber}</span>
+                    <span>
+                      Attempt #{attempt.sequenceNumber}
+                      <small>{attempt.exerciseId}</small>
+                    </span>
                     <strong>{attempt.submittedAnswer}</strong>
                     <span className={`attempt-result ${attempt.result}`}>
                       {attempt.result === 'correct' ? 'Correct' : 'Incorrect'}
@@ -204,7 +345,7 @@ function App() {
 
       <footer>
         <span aria-hidden="true">◆</span>
-        Predict first. Learn from the context change.
+        Predict first. Mastery comes from evaluated evidence.
       </footer>
     </main>
   )
