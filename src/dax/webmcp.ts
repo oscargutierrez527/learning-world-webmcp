@@ -5,7 +5,7 @@ import {
   isDaxMissionMastered,
   requiredDaxSkills,
 } from './learning'
-import type { DaxAttempt } from './types'
+import type { DaxAgentSupport, DaxAttempt } from './types'
 
 export interface DaxWebMcpSnapshot {
   currentExerciseIndex: number
@@ -120,8 +120,56 @@ function getLearningProgressResult(snapshot: DaxWebMcpSnapshot) {
   }
 }
 
+function getCurrentLearnerState(snapshot: DaxWebMcpSnapshot) {
+  const exercise = getCurrentExercise(snapshot)
+  const latestAttempt = snapshot.attempts
+    .filter(({ exerciseId }) => exerciseId === exercise.id)
+    .at(-1)
+
+  if (latestAttempt?.result === 'correct') {
+    return 'solved' as const
+  }
+
+  if (latestAttempt?.result === 'incorrect') {
+    return 'incorrect' as const
+  }
+
+  return 'not_attempted' as const
+}
+
+function getSocraticSupport(snapshot: DaxWebMcpSnapshot): DaxAgentSupport {
+  const exercise = getCurrentExercise(snapshot)
+  const learnerState = getCurrentLearnerState(snapshot)
+
+  return {
+    type: 'socratic',
+    exerciseId: exercise.id,
+    learnerState,
+    text:
+      learnerState === 'incorrect'
+        ? exercise.socraticAfterIncorrect
+        : exercise.socraticBeforeAttempt,
+  }
+}
+
+function getExplanationSupport(snapshot: DaxWebMcpSnapshot): DaxAgentSupport {
+  const exercise = getCurrentExercise(snapshot)
+  const learnerState = getCurrentLearnerState(snapshot)
+
+  return {
+    type: 'explanation',
+    exerciseId: exercise.id,
+    learnerState,
+    text:
+      learnerState === 'solved'
+        ? [exercise.conceptExplanation, ...exercise.reasoningSteps].join(' ')
+        : exercise.conceptExplanation,
+  }
+}
+
 export function createDaxWebMcpTools(
   getSnapshot: () => DaxWebMcpSnapshot,
+  showSupport: (support: DaxAgentSupport) => void = () => undefined,
 ): WebMCP.ModelContextTool[] {
   return [
     {
@@ -159,6 +207,30 @@ export function createDaxWebMcpTools(
       inputSchema: emptyInputSchema,
       annotations: { readOnlyHint: true },
       execute: () => getLearningProgressResult(getSnapshot()),
+    },
+    {
+      name: 'request_socratic_intervention',
+      title: 'Request Socratic DAX support',
+      description:
+        'Use to show a bounded Socratic question for the learner’s current DAX exercise and attempt state.',
+      inputSchema: emptyInputSchema,
+      execute: () => {
+        const support = getSocraticSupport(getSnapshot())
+        showSupport(support)
+        return support
+      },
+    },
+    {
+      name: 'request_explanation',
+      title: 'Request DAX concept explanation',
+      description:
+        'Use to show a bounded explanation for the learner’s current DAX filter-context concept.',
+      inputSchema: emptyInputSchema,
+      execute: () => {
+        const support = getExplanationSupport(getSnapshot())
+        showSupport(support)
+        return support
+      },
     },
   ]
 }

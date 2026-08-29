@@ -8,17 +8,18 @@ import {
   isDaxMissionMastered,
   requiredDaxSkills,
 } from './dax/learning'
-import type { DaxAttempt } from './dax/types'
+import type { DaxAgentSupport, DaxAttempt } from './dax/types'
 import { useDaxWebMcp } from './dax/useDaxWebMcp'
 
 function App() {
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0)
   const [prediction, setPrediction] = useState('')
   const [attempts, setAttempts] = useState<DaxAttempt[]>([])
+  const [agentSupport, setAgentSupport] = useState<DaxAgentSupport | null>(null)
   const [validationError, setValidationError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useDaxWebMcp({ currentExerciseIndex, attempts })
+  useDaxWebMcp({ currentExerciseIndex, attempts }, setAgentSupport)
 
   const exercise = daxExercises[currentExerciseIndex]
   const currentExerciseAttempts = attempts.filter(
@@ -75,6 +76,7 @@ function App() {
 
     setCurrentExerciseIndex((index) => index + 1)
     setPrediction('')
+    setAgentSupport(null)
     setValidationError('')
     requestAnimationFrame(() => inputRef.current?.focus())
   }
@@ -253,6 +255,37 @@ function App() {
               </p>
             )}
           </form>
+
+          <section
+            className={`agent-support ${agentSupport ? 'active' : ''}`}
+            aria-label="Agent support"
+            aria-live="polite"
+          >
+            <div className="agent-support-heading">
+              <div>
+                <p className="feedback-kicker">Contextual assistance</p>
+                <h3>Agent support</h3>
+              </div>
+              {agentSupport && (
+                <span className={`support-type ${agentSupport.type}`}>
+                  {agentSupport.type === 'socratic' ? 'Socratic' : 'Explanation'}
+                </span>
+              )}
+            </div>
+            {agentSupport ? (
+              <div className="agent-support-content">
+                <p>{agentSupport.text}</p>
+                <small>
+                  {agentSupport.exerciseId} ·{' '}
+                  {agentSupport.learnerState.replace('_', ' ')}
+                </small>
+              </div>
+            ) : (
+              <p className="agent-support-empty">
+                No support has been requested for this exercise.
+              </p>
+            )}
+          </section>
 
           {latestAttempt?.result === 'incorrect' && (
             <section className="feedback incorrect" aria-live="polite">

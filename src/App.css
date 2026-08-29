@@ -522,6 +522,80 @@ form label {
   font-size: 0.78rem;
 }
 
+.agent-support {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px dashed #c9cec1;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.agent-support.active {
+  border-style: solid;
+  border-color: #aebfae;
+  background: #f2f6ef;
+}
+
+.agent-support-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-support-heading .feedback-kicker {
+  margin-bottom: 2px;
+}
+
+.agent-support-heading h3 {
+  margin: 0;
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+
+.support-type {
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.support-type.socratic {
+  background: var(--green-light);
+  color: var(--green);
+}
+
+.support-type.explanation {
+  background: #f4e8d5;
+  color: #8a5229;
+}
+
+.agent-support-content > p,
+.agent-support-empty {
+  margin: 10px 0 0;
+  color: #4e594c;
+  font-size: 0.82rem;
+  line-height: 1.52;
+}
+
+.agent-support-content small {
+  display: block;
+  margin-top: 9px;
+  color: #7c8579;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.agent-support-empty {
+  color: #7c8579;
+}
+
 .feedback {
   margin-top: 24px;
   padding: 22px;

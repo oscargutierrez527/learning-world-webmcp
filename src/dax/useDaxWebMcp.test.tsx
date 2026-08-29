@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
@@ -24,7 +24,7 @@ function setNavigatorModelContext(modelContext: unknown) {
 }
 
 function WebMcpHarness({ snapshot }: { snapshot: DaxWebMcpSnapshot }) {
-  useDaxWebMcp(snapshot)
+  useDaxWebMcp(snapshot, () => undefined)
   return null
 }
 
@@ -59,7 +59,7 @@ describe('useDaxWebMcp', () => {
       <WebMcpHarness snapshot={{ currentExerciseIndex: 0, attempts: [] }} />,
     )
 
-    await waitFor(() => expect(documentRegisterTool).toHaveBeenCalledTimes(4))
+    await waitFor(() => expect(documentRegisterTool).toHaveBeenCalledTimes(6))
     expect(navigatorRegisterTool).not.toHaveBeenCalled()
     expect(
       documentRegisterTool.mock.calls.every((call) =>
@@ -82,7 +82,7 @@ describe('useDaxWebMcp', () => {
     const { rerender } = render(
       <WebMcpHarness snapshot={initialSnapshot} />,
     )
-    await waitFor(() => expect(registerTool).toHaveBeenCalledTimes(4))
+    await waitFor(() => expect(registerTool).toHaveBeenCalledTimes(6))
 
     const attemptHistoryTool = registeredTools.find(
       ({ name }) => name === 'get_attempt_history',
@@ -129,5 +129,60 @@ describe('useDaxWebMcp', () => {
         },
       ],
     })
+  })
+
+  it('shows requested support without changing authoritative learner state', async () => {
+    const user = userEvent.setup()
+    const registeredTools: WebMCP.ModelContextTool[] = []
+    const registerTool = vi.fn(
+      async (tool: WebMCP.ModelContextTool) => void registeredTools.push(tool),
+    )
+    setDocumentModelContext({ registerTool })
+
+    render(<App />)
+    await waitFor(() => expect(registerTool).toHaveBeenCalledTimes(6))
+
+    const supportRegion = screen.getByRole('region', { name: 'Agent support' })
+    expect(supportRegion).toHaveTextContent(
+      'No support has been requested for this exercise.',
+    )
+
+    const socraticTool = registeredTools.find(
+      ({ name }) => name === 'request_socratic_intervention',
+    )
+    const historyTool = registeredTools.find(
+      ({ name }) => name === 'get_attempt_history',
+    )
+    const progressTool = registeredTools.find(
+      ({ name }) => name === 'get_learning_progress',
+    )
+    expect(socraticTool).toBeDefined()
+    expect(historyTool).toBeDefined()
+    expect(progressTool).toBeDefined()
+
+    const executeOptions = { signal: new AbortController().signal }
+    const progressBefore = await progressTool!.execute({}, executeOptions)
+
+    await act(async () => {
+      await Promise.resolve(socraticTool!.execute({}, executeOptions))
+    })
+
+    expect(within(supportRegion).getByText('Socratic')).toBeInTheDocument()
+    expect(supportRegion).toHaveTextContent('ALL(Sales[Region])')
+    await expect(
+      Promise.resolve(historyTool!.execute({}, executeOptions)),
+    ).resolves.toEqual({ empty: true, attempts: [] })
+    await expect(
+      Promise.resolve(progressTool!.execute({}, executeOptions)),
+    ).resolves.toEqual(progressBefore)
+    expect(
+      screen.queryByRole('region', { name: 'Attempt history' }),
+    ).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Your numeric answer'), '250')
+    await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
+    expect(
+      screen.getByRole('region', { name: 'Attempt history' }),
+    ).toBeInTheDocument()
   })
 })

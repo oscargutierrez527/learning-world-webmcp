@@ -34,6 +34,12 @@ export const daxExercises: DaxExercise[] = [
     ],
     incorrectFeedback:
       'Re-check what ALL(Sales[Region]) does to the existing Region filter inside CALCULATE.',
+    socraticBeforeAttempt:
+      'Start with Region = East. When CALCULATE evaluates ALL(Sales[Region]), what happens to that existing filter before SUM runs?',
+    socraticAfterIncorrect:
+      'What happens to the existing Region filter when ALL(Sales[Region]) is evaluated inside CALCULATE?',
+    conceptExplanation:
+      'CALCULATE evaluates its expression in a modified filter context. ALL(Sales[Region]) removes the filter from Region; it does not add a new Region value.',
     skillIds: ['S1', 'S2'],
   },
   {
@@ -62,6 +68,12 @@ export const daxExercises: DaxExercise[] = [
     ],
     incorrectFeedback:
       'Focus on what CALCULATE does when its new filter targets the same Region column as the existing filter.',
+    socraticBeforeAttempt:
+      'The current context says East, while CALCULATE applies West to the same Region column. Which filter controls the expression?',
+    socraticAfterIncorrect:
+      'When CALCULATE applies a filter to the same Region column, does it combine with or replace the existing filter?',
+    conceptExplanation:
+      'A CALCULATE filter that targets an already-filtered column replaces the existing filter on that column unless KEEPFILTERS is used. Filters on other columns remain active.',
     skillIds: ['S3'],
   },
   {
@@ -98,6 +110,12 @@ export const daxExercises: DaxExercise[] = [
     ],
     incorrectFeedback:
       'Identify which filter ALL removes, then check which unrelated filter remains active.',
+    socraticBeforeAttempt:
+      'ALL targets Region only. Which active filter is on a different column and therefore still limits the rows?',
+    socraticAfterIncorrect:
+      'Which filter does ALL(Sales[Region]) remove, and which Channel filter remains active?',
+    conceptExplanation:
+      'ALL(Sales[Region]) clears only the Region filter. Channel = Online remains in the filter context, so SUM still sees only rows allowed by Channel.',
     skillIds: ['S4'],
   },
   {
@@ -134,6 +152,12 @@ export const daxExercises: DaxExercise[] = [
     ],
     incorrectFeedback:
       'Track the Region filter separately from Segment: determine which one is removed and which one still limits Orders.',
+    socraticBeforeAttempt:
+      'In Orders, ALL targets Region. Which Segment filter still constrains the visible rows after Region is removed?',
+    socraticAfterIncorrect:
+      'Separate the filters by column: what happens to Region, and what continues to happen to Segment?',
+    conceptExplanation:
+      'The same rule transfers to Orders: ALL(Orders[Region]) removes Region while the unrelated Segment = Retail filter remains active.',
     skillIds: ['S1', 'S2', 'S4'],
   },
 ]

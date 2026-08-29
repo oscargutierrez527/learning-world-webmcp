@@ -34,6 +34,9 @@ export interface DaxExercise {
   expectedAnswer: number
   reasoningSteps: string[]
   incorrectFeedback: string
+  socraticBeforeAttempt: string
+  socraticAfterIncorrect: string
+  conceptExplanation: string
   skillIds: DaxSkillId[]
 }
 
@@ -59,4 +62,13 @@ export interface DaxLearningEvidence {
   skillId: DaxSkillId
   exerciseId: string
   attemptId: string
+}
+
+export type DaxAgentSupportType = 'socratic' | 'explanation'
+
+export interface DaxAgentSupport {
+  type: DaxAgentSupportType
+  exerciseId: string
+  learnerState: 'not_attempted' | 'incorrect' | 'solved'
+  text: string
 }
