@@ -59,6 +59,86 @@
   font-size: 1.1rem;
 }
 
+.mission-actions {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: end;
+  gap: 9px;
+}
+
+.local-progress-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.reset-mission,
+.cancel-reset {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  background: transparent;
+  color: var(--green);
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.reset-confirmation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 18px;
+  padding: 16px 20px;
+  border: 1px solid #e6b8a5;
+  border-radius: 14px;
+  background: var(--orange-light);
+}
+
+.reset-confirmation .eyebrow {
+  margin-bottom: 3px;
+  color: #9d4423;
+}
+
+.reset-confirmation h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+
+.reset-confirmation p:last-child {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.reset-confirmation-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.confirm-reset {
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #9d4423;
+  color: white;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.cancel-reset {
+  border-bottom: 0;
+  padding: 9px 5px;
+}
+
 .mission-overview {
   margin-top: 18px;
   padding: 20px 22px;
@@ -1040,6 +1120,22 @@ footer span {
 
   .exercise-id strong {
     font-size: 0.8rem;
+  }
+
+  .mission-actions {
+    gap: 6px;
+  }
+
+  .local-progress-actions {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .reset-confirmation {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
   }
 
   .exercise-layout {

@@ -3,8 +3,9 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
+import { persistDaxMissionState } from './persistence'
 import type { DaxAttempt } from './types'
 import { useDaxWebMcp } from './useDaxWebMcp'
 import type { DaxWebMcpSnapshot } from './webmcp'
@@ -27,6 +28,8 @@ function WebMcpHarness({ snapshot }: { snapshot: DaxWebMcpSnapshot }) {
   useDaxWebMcp(snapshot, () => undefined)
   return null
 }
+
+beforeEach(() => localStorage.clear())
 
 afterEach(() => {
   cleanup()
@@ -206,5 +209,126 @@ describe('useDaxWebMcp', () => {
     expect(
       screen.getByRole('region', { name: 'Attempt history' }),
     ).toBeInTheDocument()
+  })
+
+  it('exposes restored state and then the fresh reset state through WebMCP', async () => {
+    const user = userEvent.setup()
+    const registeredTools: WebMCP.ModelContextTool[] = []
+    const registerTool = vi.fn(
+      async (tool: WebMCP.ModelContextTool) => void registeredTools.push(tool),
+    )
+    setDocumentModelContext({ registerTool })
+    const restoredAttempts: DaxAttempt[] = [
+      {
+        id: 'DAX-01-attempt-1',
+        exerciseId: 'DAX-01',
+        submittedAnswer: 450,
+        result: 'correct',
+        sequenceNumber: 1,
+      },
+      {
+        id: 'DAX-02-attempt-2',
+        exerciseId: 'DAX-02',
+        submittedAnswer: 0,
+        result: 'incorrect',
+        sequenceNumber: 2,
+      },
+    ]
+    persistDaxMissionState(restoredAttempts, 'DAX-02')
+
+    render(<App />)
+    await waitFor(() => expect(registerTool).toHaveBeenCalledTimes(7))
+
+    const getTool = (name: string) =>
+      registeredTools.find((tool) => tool.name === name)!
+    const executeOptions = { signal: new AbortController().signal }
+
+    await expect(
+      Promise.resolve(
+        getTool('get_current_exercise').execute({}, executeOptions),
+      ),
+    ).resolves.toMatchObject({ exerciseId: 'DAX-02', exerciseNumber: 2 })
+    await expect(
+      Promise.resolve(getTool('get_attempt_history').execute({}, executeOptions)),
+    ).resolves.toMatchObject({
+      empty: false,
+      attempts: [
+        { exerciseId: 'DAX-01', evaluation: 'correct' },
+        {
+          exerciseId: 'DAX-02',
+          evaluation: 'incorrect',
+          possibleMisconception: { id: 'M04' },
+        },
+      ],
+    })
+    await expect(
+      Promise.resolve(getTool('get_learning_progress').execute({}, executeOptions)),
+    ).resolves.toMatchObject({
+      exercises: { solved: 1, total: 12 },
+      currentExercise: { exerciseId: 'DAX-02' },
+      demonstratedSkillIds: ['S1', 'S2'],
+      mastery: false,
+      missionComplete: false,
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Reset mission' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm reset' }))
+
+    await waitFor(async () => {
+      await expect(
+        Promise.resolve(
+          getTool('get_current_exercise').execute({}, executeOptions),
+        ),
+      ).resolves.toMatchObject({ exerciseId: 'DAX-01', exerciseNumber: 1 })
+      await expect(
+        Promise.resolve(
+          getTool('get_attempt_history').execute({}, executeOptions),
+        ),
+      ).resolves.toEqual({ empty: true, attempts: [] })
+      await expect(
+        Promise.resolve(
+          getTool('get_learning_progress').execute({}, executeOptions),
+        ),
+      ).resolves.toMatchObject({
+        exercises: { solved: 0, total: 12 },
+        currentExercise: { exerciseId: 'DAX-01' },
+        demonstratedSkillIds: [],
+        transferRequirement: { status: 'pending' },
+        mastery: false,
+        missionComplete: false,
+      })
+    })
+  })
+
+  it('does not persist Agent Support across a remount', async () => {
+    const registeredTools: WebMCP.ModelContextTool[] = []
+    const registerTool = vi.fn(
+      async (tool: WebMCP.ModelContextTool) => void registeredTools.push(tool),
+    )
+    setDocumentModelContext({ registerTool })
+
+    const { unmount } = render(<App />)
+    await waitFor(() => expect(registerTool).toHaveBeenCalledTimes(7))
+    const socraticTool = registeredTools.find(
+      ({ name }) => name === 'request_socratic_intervention',
+    )!
+
+    await act(async () => {
+      await Promise.resolve(
+        socraticTool.execute({}, { signal: new AbortController().signal }),
+      )
+    })
+    expect(screen.getByRole('region', { name: 'Agent support' })).toHaveTextContent(
+      'Socratic',
+    )
+
+    unmount()
+    registeredTools.splice(0)
+    render(<App />)
+    await waitFor(() => expect(registeredTools).toHaveLength(7))
+
+    expect(screen.getByRole('region', { name: 'Agent support' })).toHaveTextContent(
+      'No support has been requested for this exercise.',
+    )
   })
 })

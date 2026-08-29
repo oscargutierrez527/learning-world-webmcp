@@ -1,4 +1,4 @@
-import { type FormEvent, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import './App.css'
 import { evaluateDaxPrediction } from './dax/evaluation'
 import { daxExercises } from './dax/exercise'
@@ -9,6 +9,11 @@ import {
   requiredDaxSkills,
 } from './dax/learning'
 import { identifyDaxMisconception } from './dax/misconceptions'
+import {
+  clearDaxMissionState,
+  persistDaxMissionState,
+  restoreDaxMissionState,
+} from './dax/persistence'
 import type {
   DaxAgentSupport,
   DaxAttempt,
@@ -71,14 +76,29 @@ function DaxDatasetTable({
 }
 
 function App() {
-  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0)
+  const [restoredMissionState] = useState(() => restoreDaxMissionState())
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(
+    restoredMissionState.currentExerciseIndex,
+  )
   const [prediction, setPrediction] = useState('')
-  const [attempts, setAttempts] = useState<DaxAttempt[]>([])
+  const [attempts, setAttempts] = useState<DaxAttempt[]>(
+    restoredMissionState.attempts,
+  )
   const [agentSupport, setAgentSupport] = useState<DaxAgentSupport | null>(null)
   const [validationError, setValidationError] = useState('')
+  const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useDaxWebMcp({ currentExerciseIndex, attempts }, setAgentSupport)
+
+  useEffect(() => {
+    if (attempts.length === 0 && currentExerciseIndex === 0) {
+      clearDaxMissionState()
+      return
+    }
+
+    persistDaxMissionState(attempts, daxExercises[currentExerciseIndex].id)
+  }, [attempts, currentExerciseIndex])
 
   const exercise = daxExercises[currentExerciseIndex]
   const currentExerciseAttempts = attempts.filter(
@@ -147,6 +167,17 @@ function App() {
     requestAnimationFrame(() => inputRef.current?.focus())
   }
 
+  function resetMission() {
+    clearDaxMissionState()
+    setAttempts([])
+    setCurrentExerciseIndex(0)
+    setPrediction('')
+    setAgentSupport(null)
+    setValidationError('')
+    setResetConfirmationOpen(false)
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
   return (
     <main className="learning-shell">
       <header className="mission-header">
@@ -154,13 +185,53 @@ function App() {
           <p className="eyebrow">Guided DAX mission</p>
           <h1>DAX CALCULATE &amp; Filter Context</h1>
         </div>
-        <div className="exercise-id" aria-label={`Exercise ${exercise.id}`}>
-          <span>
-            Exercise {currentExerciseIndex + 1} of {daxExercises.length}
-          </span>
-          <strong>{exercise.id}</strong>
+        <div className="mission-actions">
+          <div className="exercise-id" aria-label={`Exercise ${exercise.id}`}>
+            <span>
+              Exercise {currentExerciseIndex + 1} of {daxExercises.length}
+            </span>
+            <strong>{exercise.id}</strong>
+          </div>
+          <div className="local-progress-actions">
+            <button
+              type="button"
+              className="reset-mission"
+              onClick={() => setResetConfirmationOpen(true)}
+            >
+              Reset mission
+            </button>
+          </div>
         </div>
       </header>
+
+      {resetConfirmationOpen && (
+        <section
+          className="reset-confirmation"
+          role="alertdialog"
+          aria-labelledby="reset-mission-title"
+          aria-describedby="reset-mission-description"
+        >
+          <div>
+            <p className="eyebrow">Reset mission</p>
+            <h2 id="reset-mission-title">Start again from DAX-01?</h2>
+            <p id="reset-mission-description">
+              This clears all locally saved attempts and mission progress.
+            </p>
+          </div>
+          <div className="reset-confirmation-actions">
+            <button type="button" className="confirm-reset" onClick={resetMission}>
+              Confirm reset
+            </button>
+            <button
+              type="button"
+              className="cancel-reset"
+              onClick={() => setResetConfirmationOpen(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="mission-overview" aria-label="Mission progress">
         <div className="progress-summary">

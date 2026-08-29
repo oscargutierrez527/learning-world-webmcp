@@ -1,10 +1,23 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import App from './App'
+import { daxExercises } from './dax/exercise'
+import {
+  DAX_MISSION_STORAGE_KEY,
+  persistDaxMissionState,
+} from './dax/persistence'
+import type { DaxAttempt } from './dax/types'
 
 const expectedAnswers = [450, 300, 300, 250, 250, 150, 50, 250, 500, 450, 200, 300]
 
@@ -26,6 +39,7 @@ async function solveCurrentExercise(
 }
 
 afterEach(cleanup)
+beforeEach(() => localStorage.clear())
 
 describe('DAX learner attempt flow', () => {
   it('records an incorrect valid prediction as Attempt #1 without revealing the answer', async () => {
@@ -143,6 +157,86 @@ describe('DAX learner attempt flow', () => {
     ).toBeInTheDocument()
     const history = screen.getByRole('region', { name: 'Attempt history' })
     expect(within(history).getByRole('listitem')).toHaveTextContent('DAX-01')
+  })
+
+  it('restores progress and a mapped incorrect attempt after remount', async () => {
+    const user = userEvent.setup()
+    const { unmount } = render(<App />)
+
+    await solveCurrentExercise(user, 450, 2)
+    await user.type(screen.getByLabelText('Your numeric answer'), '0')
+    await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
+    await waitFor(() =>
+      expect(localStorage.getItem(DAX_MISSION_STORAGE_KEY)).not.toBeNull(),
+    )
+
+    unmount()
+    render(<App />)
+
+    expect(
+      screen.getByText('DAX-02', { selector: '.exercise-id strong' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('1 of 12 exercises solved')).toBeInTheDocument()
+    expect(
+      screen
+        .getByRole('region', { name: 'Mission progress' })
+        .querySelector('.skill-count'),
+    ).toHaveTextContent('2 of 8 skills demonstrated')
+    const history = screen.getByRole('region', { name: 'Attempt history' })
+    expect(within(history).getAllByRole('listitem')).toHaveLength(2)
+    const possibleMisconception = screen.getByRole('note', {
+      name: 'Possible misconception',
+    })
+    expect(possibleMisconception).toHaveTextContent('M04')
+    expect(
+      screen.queryByRole('heading', { name: 'Mastery demonstrated' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('resets persisted completion to a fresh DAX-01 mission', async () => {
+    const user = userEvent.setup()
+    const attempts: DaxAttempt[] = daxExercises.map((exercise, index) => ({
+      id: `${exercise.id}-attempt-${index + 1}`,
+      exerciseId: exercise.id,
+      submittedAnswer: exercise.expectedAnswer,
+      result: 'correct',
+      sequenceNumber: index + 1,
+    }))
+    persistDaxMissionState(attempts, 'DAX-12')
+    render(<App />)
+
+    expect(
+      screen.getByRole('heading', { name: 'Mastery demonstrated' }),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Reset mission' }))
+    const confirmation = screen.getByRole('alertdialog')
+    expect(confirmation).toHaveTextContent(
+      'This clears all locally saved attempts and mission progress.',
+    )
+    await user.click(
+      within(confirmation).getByRole('button', { name: 'Confirm reset' }),
+    )
+
+    expect(
+      screen.getByText('DAX-01', { selector: '.exercise-id strong' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('0 of 12 exercises solved')).toBeInTheDocument()
+    expect(
+      screen
+        .getByRole('region', { name: 'Mission progress' })
+        .querySelector('.skill-count'),
+    ).toHaveTextContent('0 of 8 skills demonstrated')
+    expect(
+      screen.queryByRole('region', { name: 'Attempt history' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Mastery demonstrated' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Agent support' })).toHaveTextContent(
+      'No support has been requested for this exercise.',
+    )
+    expect(localStorage.getItem(DAX_MISSION_STORAGE_KEY)).toBeNull()
   })
 
   it('renders both datasets and the model relationship on DAX-10', async () => {
