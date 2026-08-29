@@ -1,5 +1,21 @@
 export type DaxAttemptResult = 'correct' | 'incorrect'
 
+export type DaxMisconceptionId =
+  | 'M02'
+  | 'M03'
+  | 'M04'
+  | 'M05'
+  | 'M06'
+  | 'M07'
+  | 'M08'
+  | 'M09'
+  | 'M10'
+
+export interface DaxPossibleMisconception {
+  id: DaxMisconceptionId
+  label: string
+}
+
 export type DaxSkillId =
   | 'S1'
   | 'S2'
@@ -59,6 +75,7 @@ export interface DaxExercise {
   relationship?: DaxModelRelationship
   filterContext: DaxFilterContext[]
   measure: string
+  filterOperation: string
   question: string
   expectedAnswer: number
   reasoningSteps: string[]
@@ -93,11 +110,30 @@ export interface DaxLearningEvidence {
   attemptId: string
 }
 
-export type DaxAgentSupportType = 'socratic' | 'explanation'
+export type DaxLearnerState = 'not_attempted' | 'incorrect' | 'solved'
 
-export interface DaxAgentSupport {
-  type: DaxAgentSupportType
+export type DaxSupportMode = 'socratic' | 'explanation' | 'filter_trace'
+
+export interface DaxTextSupport {
+  type: 'socratic' | 'explanation'
   exerciseId: string
-  learnerState: 'not_attempted' | 'incorrect' | 'solved'
+  learnerState: DaxLearnerState
   text: string
+  possibleMisconception: DaxPossibleMisconception | null
 }
+
+export interface DaxFilterTrace {
+  type: 'filter_trace'
+  mode: 'filter_trace'
+  exerciseId: string
+  learnerState: DaxLearnerState
+  beforeFilters: string[]
+  operation: string
+  focus: string[]
+  possibleMisconception: DaxPossibleMisconception | null
+  complete: boolean
+  establishedReasoning?: string[]
+  result?: number
+}
+
+export type DaxAgentSupport = DaxTextSupport | DaxFilterTrace

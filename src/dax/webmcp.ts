@@ -5,7 +5,17 @@ import {
   isDaxMissionMastered,
   requiredDaxSkills,
 } from './learning'
-import type { DaxAgentSupport, DaxAttempt } from './types'
+import {
+  daxMisconceptions,
+  identifyDaxMisconception,
+} from './misconceptions'
+import type {
+  DaxAgentSupport,
+  DaxAttempt,
+  DaxFilterTrace,
+  DaxPossibleMisconception,
+  DaxTextSupport,
+} from './types'
 
 export interface DaxWebMcpSnapshot {
   currentExerciseIndex: number
@@ -72,15 +82,32 @@ function inspectFilterContextResult(snapshot: DaxWebMcpSnapshot) {
   }
 }
 
+function getAttemptPossibleMisconception(
+  attempt: DaxAttempt,
+): DaxPossibleMisconception | null {
+  const exercise = daxExercises.find(({ id }) => id === attempt.exerciseId)
+  if (!exercise) {
+    return null
+  }
+
+  return identifyDaxMisconception(
+    exercise,
+    attempt.submittedAnswer,
+    attempt.result,
+  )
+}
+
 function getAttemptHistoryResult(snapshot: DaxWebMcpSnapshot) {
-  const attempts = snapshot.attempts.map(
-    ({ sequenceNumber, exerciseId, submittedAnswer, result }) => ({
+  const attempts = snapshot.attempts.map((attempt) => {
+    const { sequenceNumber, exerciseId, submittedAnswer, result } = attempt
+    return {
       sequenceNumber,
       exerciseId,
       submittedAnswer,
       evaluation: result,
-    }),
-  )
+      possibleMisconception: getAttemptPossibleMisconception(attempt),
+    }
+  })
 
   return {
     empty: attempts.length === 0,
@@ -131,11 +158,15 @@ function getLearningProgressResult(snapshot: DaxWebMcpSnapshot) {
   }
 }
 
-function getCurrentLearnerState(snapshot: DaxWebMcpSnapshot) {
+function getLatestCurrentAttempt(snapshot: DaxWebMcpSnapshot) {
   const exercise = getCurrentExercise(snapshot)
-  const latestAttempt = snapshot.attempts
+  return snapshot.attempts
     .filter(({ exerciseId }) => exerciseId === exercise.id)
     .at(-1)
+}
+
+function getCurrentLearnerState(snapshot: DaxWebMcpSnapshot) {
+  const latestAttempt = getLatestCurrentAttempt(snapshot)
 
   if (latestAttempt?.result === 'correct') {
     return 'solved' as const
@@ -148,33 +179,83 @@ function getCurrentLearnerState(snapshot: DaxWebMcpSnapshot) {
   return 'not_attempted' as const
 }
 
-function getSocraticSupport(snapshot: DaxWebMcpSnapshot): DaxAgentSupport {
+function getCurrentPossibleMisconception(
+  snapshot: DaxWebMcpSnapshot,
+): DaxPossibleMisconception | null {
+  const latestAttempt = getLatestCurrentAttempt(snapshot)
+  return latestAttempt ? getAttemptPossibleMisconception(latestAttempt) : null
+}
+
+function getSocraticSupport(snapshot: DaxWebMcpSnapshot): DaxTextSupport {
   const exercise = getCurrentExercise(snapshot)
   const learnerState = getCurrentLearnerState(snapshot)
+  const possibleMisconception = getCurrentPossibleMisconception(snapshot)
 
   return {
     type: 'socratic',
     exerciseId: exercise.id,
     learnerState,
+    possibleMisconception,
     text:
-      learnerState === 'incorrect'
+      possibleMisconception
+        ? daxMisconceptions[possibleMisconception.id].socraticPrompt
+        : learnerState === 'incorrect'
         ? exercise.socraticAfterIncorrect
         : exercise.socraticBeforeAttempt,
   }
 }
 
-function getExplanationSupport(snapshot: DaxWebMcpSnapshot): DaxAgentSupport {
+function getExplanationSupport(snapshot: DaxWebMcpSnapshot): DaxTextSupport {
   const exercise = getCurrentExercise(snapshot)
   const learnerState = getCurrentLearnerState(snapshot)
+  const possibleMisconception = getCurrentPossibleMisconception(snapshot)
 
   return {
     type: 'explanation',
     exerciseId: exercise.id,
     learnerState,
+    possibleMisconception,
     text:
       learnerState === 'solved'
         ? [exercise.conceptExplanation, ...exercise.reasoningSteps].join(' ')
+        : possibleMisconception
+          ? daxMisconceptions[possibleMisconception.id].explanation
         : exercise.conceptExplanation,
+  }
+}
+
+function getFilterTraceSupport(snapshot: DaxWebMcpSnapshot): DaxFilterTrace {
+  const exercise = getCurrentExercise(snapshot)
+  const learnerState = getCurrentLearnerState(snapshot)
+  const possibleMisconception = getCurrentPossibleMisconception(snapshot)
+  const focus = [
+    'Identify which existing filter each CALCULATE operation targets.',
+    'Identify active filters on unrelated columns.',
+    'Rebuild the filter context before evaluating SUM.',
+  ]
+
+  if (possibleMisconception) {
+    focus.unshift(daxMisconceptions[possibleMisconception.id].traceFocus)
+  }
+
+  return {
+    type: 'filter_trace',
+    mode: 'filter_trace',
+    exerciseId: exercise.id,
+    learnerState,
+    beforeFilters: exercise.filterContext.map(
+      ({ column, value }) => `${column} = ${value}`,
+    ),
+    operation: exercise.filterOperation,
+    focus,
+    possibleMisconception,
+    complete: learnerState === 'solved',
+    ...(learnerState === 'solved'
+      ? {
+          establishedReasoning: [...exercise.reasoningSteps],
+          result: exercise.expectedAnswer,
+        }
+      : {}),
   }
 }
 
@@ -239,6 +320,18 @@ export function createDaxWebMcpTools(
       inputSchema: emptyInputSchema,
       execute: () => {
         const support = getExplanationSupport(getSnapshot())
+        showSupport(support)
+        return support
+      },
+    },
+    {
+      name: 'request_filter_trace',
+      title: 'Request DAX filter trace',
+      description:
+        'Use to show a structured filter-context reasoning scaffold for the learner’s current DAX exercise and attempt state.',
+      inputSchema: emptyInputSchema,
+      execute: () => {
+        const support = getFilterTraceSupport(getSnapshot())
         showSupport(support)
         return support
       },

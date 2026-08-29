@@ -48,7 +48,7 @@ async function executeTool(
 }
 
 describe('DAX WebMCP tool contracts', () => {
-  it('exposes exactly the same six intended DAX tools', () => {
+  it('exposes exactly the seven intended DAX tools', () => {
     const tools = createDaxWebMcpTools(() => ({
       currentExerciseIndex: 0,
       attempts: [],
@@ -61,6 +61,7 @@ describe('DAX WebMCP tool contracts', () => {
       'get_learning_progress',
       'request_socratic_intervention',
       'request_explanation',
+      'request_filter_trace',
     ])
   })
 
@@ -188,8 +189,23 @@ describe('DAX WebMCP tool contracts', () => {
           exerciseId: 'DAX-01',
           submittedAnswer: 250,
           evaluation: 'incorrect',
+          possibleMisconception: {
+            id: 'M03',
+            label: 'Assumes the targeted filter remains unchanged',
+          },
         },
       ],
+    })
+  })
+
+  it('returns null possible misconception for an unmapped wrong answer', async () => {
+    const result = await executeTool('get_attempt_history', {
+      currentExerciseIndex: 0,
+      attempts: [attempt('DAX-01', 123, 'incorrect', 1)],
+    })
+
+    expect(result).toMatchObject({
+      attempts: [{ possibleMisconception: null }],
     })
   })
 
@@ -285,7 +301,9 @@ describe('DAX WebMCP tool contracts', () => {
     expect(afterIncorrect).toMatchObject({
       exerciseId: 'DAX-01',
       learnerState: 'incorrect',
+      possibleMisconception: { id: 'M03' },
     })
+    expect(afterIncorrect.text).toContain('filter targeted')
     expect(afterIncorrect.text).not.toBe(beforeAttempt.text)
     expect(serialized).not.toContain('expectedAnswer')
     expect(serialized).not.toContain('450')
@@ -303,7 +321,10 @@ describe('DAX WebMCP tool contracts', () => {
       exerciseId: 'DAX-01',
       learnerState: 'incorrect',
     })
-    expect(serialized).toContain('modified filter context')
+    expect(result).toMatchObject({
+      possibleMisconception: { id: 'M03' },
+    })
+    expect(serialized).toContain('targeted CALCULATE filter modification')
     expect(serialized).not.toContain('expectedAnswer')
     expect(serialized).not.toContain('450')
   })
@@ -360,6 +381,54 @@ describe('DAX WebMCP tool contracts', () => {
     expect(exerciseTwo.text).not.toBe(exerciseOne.text)
   })
 
+  it('returns a misconception-aware unsolved filter trace without an answer', async () => {
+    const result = await executeTool('request_filter_trace', {
+      currentExerciseIndex: 2,
+      attempts: [attempt('DAX-03', 500, 'incorrect', 1)],
+    })
+    const serialized = JSON.stringify(result)
+
+    expect(result).toMatchObject({
+      type: 'filter_trace',
+      mode: 'filter_trace',
+      exerciseId: 'DAX-03',
+      learnerState: 'incorrect',
+      beforeFilters: ['Region = East', 'Channel = Online'],
+      operation: 'ALL(Sales[Region])',
+      possibleMisconception: { id: 'M02' },
+      complete: false,
+    })
+    expect(result.focus).toEqual(
+      expect.arrayContaining([
+        'Separate the targeted column from every unrelated active filter.',
+        'Rebuild the filter context before evaluating SUM.',
+      ]),
+    )
+    expect(serialized).not.toContain('expectedAnswer')
+    expect(serialized).not.toContain('establishedReasoning')
+    expect(serialized).not.toContain('"result"')
+    expect(serialized).not.toContain('300')
+  })
+
+  it('returns established deterministic reasoning only after the exercise is solved', async () => {
+    const result = await executeTool('request_filter_trace', {
+      currentExerciseIndex: 2,
+      attempts: [attempt('DAX-03', 300, 'correct', 1)],
+    })
+
+    expect(result).toMatchObject({
+      type: 'filter_trace',
+      exerciseId: 'DAX-03',
+      learnerState: 'solved',
+      complete: true,
+      result: 300,
+      possibleMisconception: null,
+    })
+    expect(result.establishedReasoning).toEqual(
+      daxExercises[2].reasoningSteps,
+    )
+  })
+
   it('changes only support state and cannot create attempts, evidence, or mastery', async () => {
     const snapshot: DaxWebMcpSnapshot = {
       currentExerciseIndex: 0,
@@ -377,13 +446,14 @@ describe('DAX WebMCP tool contracts', () => {
     for (const name of [
       'request_socratic_intervention',
       'request_explanation',
+      'request_filter_trace',
     ]) {
       await tools
         .find((tool) => tool.name === name)!
         .execute({}, executeOptions)
     }
 
-    expect(shownSupport).toHaveLength(2)
+    expect(shownSupport).toHaveLength(3)
     expect(snapshot.attempts).toEqual(beforeAttempts)
     const afterEvidence = deriveDaxLearningEvidence(snapshot.attempts)
     expect(afterEvidence).toEqual(beforeEvidence)

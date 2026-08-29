@@ -43,6 +43,29 @@ describe('DAX learner attempt flow', () => {
     expect(attempt).toHaveTextContent('Incorrect')
     expect(screen.getByText('Incorrect prediction')).toBeInTheDocument()
     expect(screen.queryByText('Result')).not.toBeInTheDocument()
+    const possibleMisconception = screen.getByRole('note', {
+      name: 'Possible misconception',
+    })
+    expect(possibleMisconception).toHaveTextContent('M03')
+    expect(possibleMisconception).toHaveTextContent(
+      'Assumes the targeted filter remains unchanged',
+    )
+    expect(possibleMisconception).toHaveTextContent(
+      'This is a reasoning signal, not a diagnosis.',
+    )
+  })
+
+  it('does not display a possible misconception for an unmapped wrong answer', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.type(screen.getByLabelText('Your numeric answer'), '251')
+    await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
+
+    expect(screen.getByText('Incorrect prediction')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('note', { name: 'Possible misconception' }),
+    ).not.toBeInTheDocument()
   })
 
   it('records a retry with 450 as Attempt #2 and shows deterministic reasoning', async () => {

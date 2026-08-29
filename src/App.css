@@ -610,6 +610,11 @@ form label {
   color: #8a5229;
 }
 
+.support-type.filter_trace {
+  background: #e3e8f2;
+  color: #40516f;
+}
+
 .agent-support-content > p,
 .agent-support-empty {
   margin: 10px 0 0;
@@ -630,6 +635,50 @@ form label {
 
 .agent-support-empty {
   color: #7c8579;
+}
+
+.filter-trace-content {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.filter-trace-content > div {
+  display: grid;
+  gap: 5px;
+}
+
+.filter-trace-content strong {
+  color: var(--ink);
+  font-size: 0.68rem;
+}
+
+.filter-trace-content code {
+  color: #40516f;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.74rem;
+}
+
+.filter-trace-content ul,
+.filter-trace-content ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 19px;
+  color: #4e594c;
+  font-size: 0.76rem;
+  line-height: 1.42;
+}
+
+.agent-support-content .trace-result,
+.agent-support-content .support-misconception {
+  margin-top: 2px;
+  font-size: 0.7rem;
+}
+
+.agent-support-content .support-misconception {
+  color: #8a5229;
+  font-weight: 800;
 }
 
 .feedback {
@@ -669,11 +718,38 @@ form label {
   font-weight: 500;
 }
 
-.feedback > p:last-child {
+.feedback > p:not(.feedback-kicker) {
   margin: 10px 0 0;
   color: #4e594c;
   font-size: 0.86rem;
   line-height: 1.55;
+}
+
+.possible-misconception {
+  display: grid;
+  gap: 5px;
+  margin-top: 15px;
+  padding: 11px 12px;
+  border-top: 1px solid rgba(164, 62, 30, 0.18);
+  color: #70442f;
+}
+
+.possible-misconception span {
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.possible-misconception strong {
+  color: #65351f;
+  font-size: 0.78rem;
+}
+
+.possible-misconception p {
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.45;
 }
 
 .feedback code {
@@ -885,6 +961,12 @@ form label {
   font-size: 0.58rem;
   font-weight: 800;
   letter-spacing: 0.05em;
+}
+
+.attempt-history li > span:first-child small.attempt-misconception {
+  margin-top: 2px;
+  color: #9a5b3e;
+  letter-spacing: 0;
 }
 
 .attempt-result {

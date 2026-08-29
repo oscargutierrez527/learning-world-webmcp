@@ -49,6 +49,7 @@ export const daxExercises: DaxExercise[] = [
     SUM(Sales[Amount]),
     ALL(Sales[Region])
 )`,
+    filterOperation: 'ALL(Sales[Region])',
     question:
       'What result will this measure return under the current filter context?',
     expectedAnswer: 450,
@@ -85,6 +86,7 @@ export const daxExercises: DaxExercise[] = [
     SUM(Sales[Amount]),
     Sales[Region] = "West"
 )`,
+    filterOperation: 'Sales[Region] = "West"',
     question: 'What result will this measure return?',
     expectedAnswer: 300,
     reasoningSteps: [
@@ -118,6 +120,7 @@ export const daxExercises: DaxExercise[] = [
     SUM(Sales[Amount]),
     ALL(Sales[Region])
 )`,
+    filterOperation: 'ALL(Sales[Region])',
     question: 'What result will this measure return?',
     expectedAnswer: 300,
     reasoningSteps: [
@@ -156,6 +159,7 @@ export const daxExercises: DaxExercise[] = [
     SUM(Sales[Amount]),
     Sales[Region] = "West"
 )`,
+    filterOperation: 'Sales[Region] = "West"',
     question: 'What result will this measure return?',
     expectedAnswer: 250,
     reasoningSteps: [
@@ -194,6 +198,7 @@ export const daxExercises: DaxExercise[] = [
     SUM(Transactions[Amount]),
     ALL(Transactions[Channel])
 )`,
+    filterOperation: 'ALL(Transactions[Channel])',
     question: 'What result will this measure return?',
     expectedAnswer: 250,
     reasoningSteps: [
@@ -224,6 +229,7 @@ export const daxExercises: DaxExercise[] = [
     SUM(Sales[Amount]),
     Sales[Channel] = "Store"
 )`,
+    filterOperation: 'Sales[Channel] = "Store"',
     question: 'What result will this measure return?',
     expectedAnswer: 150,
     reasoningSteps: [
@@ -258,6 +264,8 @@ export const daxExercises: DaxExercise[] = [
     Sales[Region] = "West",
     Sales[Channel] = "Store"
 )`,
+    filterOperation:
+      'Sales[Region] = "West"; Sales[Channel] = "Store"',
     question: 'What result will this measure return?',
     expectedAnswer: 50,
     reasoningSteps: [
@@ -291,6 +299,8 @@ export const daxExercises: DaxExercise[] = [
         Sales[Region] IN { "East", "West" }
     )
 )`,
+    filterOperation:
+      'KEEPFILTERS(Sales[Region] IN { "East", "West" })',
     question: 'What result will this measure return?',
     expectedAnswer: 250,
     reasoningSteps: [
@@ -325,6 +335,7 @@ export const daxExercises: DaxExercise[] = [
     SUM(Sales[Amount]),
     ALL(Sales)
 )`,
+    filterOperation: 'ALL(Sales)',
     question: 'What result will this measure return?',
     expectedAnswer: 500,
     reasoningSteps: [
@@ -385,6 +396,7 @@ export const daxExercises: DaxExercise[] = [
     SUM(Sales[Amount]),
     ALL(Customers[Region])
 )`,
+    filterOperation: 'ALL(Customers[Region])',
     question: 'What result will this measure return?',
     expectedAnswer: 450,
     reasoningSteps: [
@@ -420,6 +432,8 @@ export const daxExercises: DaxExercise[] = [
     ALL(Sales[Region]),
     Sales[Channel] = "Store"
 )`,
+    filterOperation:
+      'ALL(Sales[Region]); Sales[Channel] = "Store"',
     question: 'What result will this measure return?',
     expectedAnswer: 200,
     reasoningSteps: [
@@ -458,6 +472,7 @@ export const daxExercises: DaxExercise[] = [
     SUM(Orders[Amount]),
     ALL(Orders[Region])
 )`,
+    filterOperation: 'ALL(Orders[Region])',
     question: 'What result will this measure return?',
     expectedAnswer: 300,
     reasoningSteps: [

@@ -59,7 +59,7 @@ describe('useDaxWebMcp', () => {
       <WebMcpHarness snapshot={{ currentExerciseIndex: 0, attempts: [] }} />,
     )
 
-    await waitFor(() => expect(documentRegisterTool).toHaveBeenCalledTimes(6))
+    await waitFor(() => expect(documentRegisterTool).toHaveBeenCalledTimes(7))
     expect(navigatorRegisterTool).not.toHaveBeenCalled()
     expect(
       documentRegisterTool.mock.calls.every((call) =>
@@ -82,7 +82,7 @@ describe('useDaxWebMcp', () => {
     const { rerender } = render(
       <WebMcpHarness snapshot={initialSnapshot} />,
     )
-    await waitFor(() => expect(registerTool).toHaveBeenCalledTimes(6))
+    await waitFor(() => expect(registerTool).toHaveBeenCalledTimes(7))
 
     const attemptHistoryTool = registeredTools.find(
       ({ name }) => name === 'get_attempt_history',
@@ -126,6 +126,10 @@ describe('useDaxWebMcp', () => {
           exerciseId: 'DAX-01',
           submittedAnswer: 250,
           evaluation: 'incorrect',
+          possibleMisconception: {
+            id: 'M03',
+            label: 'Assumes the targeted filter remains unchanged',
+          },
         },
       ],
     })
@@ -140,7 +144,7 @@ describe('useDaxWebMcp', () => {
     setDocumentModelContext({ registerTool })
 
     render(<App />)
-    await waitFor(() => expect(registerTool).toHaveBeenCalledTimes(6))
+    await waitFor(() => expect(registerTool).toHaveBeenCalledTimes(7))
 
     const supportRegion = screen.getByRole('region', { name: 'Agent support' })
     expect(supportRegion).toHaveTextContent(
@@ -156,9 +160,13 @@ describe('useDaxWebMcp', () => {
     const progressTool = registeredTools.find(
       ({ name }) => name === 'get_learning_progress',
     )
+    const filterTraceTool = registeredTools.find(
+      ({ name }) => name === 'request_filter_trace',
+    )
     expect(socraticTool).toBeDefined()
     expect(historyTool).toBeDefined()
     expect(progressTool).toBeDefined()
+    expect(filterTraceTool).toBeDefined()
 
     const executeOptions = { signal: new AbortController().signal }
     const progressBefore = await progressTool!.execute({}, executeOptions)
@@ -178,6 +186,20 @@ describe('useDaxWebMcp', () => {
     expect(
       screen.queryByRole('region', { name: 'Attempt history' }),
     ).not.toBeInTheDocument()
+
+    await act(async () => {
+      await Promise.resolve(filterTraceTool!.execute({}, executeOptions))
+    })
+
+    expect(within(supportRegion).getByText('Filter trace')).toBeInTheDocument()
+    expect(supportRegion).toHaveTextContent('Region = East')
+    expect(supportRegion).toHaveTextContent('ALL(Sales[Region])')
+    await expect(
+      Promise.resolve(historyTool!.execute({}, executeOptions)),
+    ).resolves.toEqual({ empty: true, attempts: [] })
+    await expect(
+      Promise.resolve(progressTool!.execute({}, executeOptions)),
+    ).resolves.toEqual(progressBefore)
 
     await user.type(screen.getByLabelText('Your numeric answer'), '250')
     await user.click(screen.getByRole('button', { name: 'Submit prediction' }))

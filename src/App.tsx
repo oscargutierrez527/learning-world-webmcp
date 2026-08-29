@@ -8,11 +8,13 @@ import {
   isDaxMissionMastered,
   requiredDaxSkills,
 } from './dax/learning'
+import { identifyDaxMisconception } from './dax/misconceptions'
 import type {
   DaxAgentSupport,
   DaxAttempt,
   DaxDataColumn,
   DaxDataRow,
+  DaxSupportMode,
 } from './dax/types'
 import { useDaxWebMcp } from './dax/useDaxWebMcp'
 
@@ -21,6 +23,12 @@ interface DaxDatasetTableProps {
   columns: DaxDataColumn[]
   rows: DaxDataRow[]
   exerciseId: string
+}
+
+const supportLabels: Record<DaxSupportMode, string> = {
+  socratic: 'Socratic',
+  explanation: 'Explanation',
+  filter_trace: 'Filter trace',
 }
 
 function DaxDatasetTable({
@@ -77,6 +85,13 @@ function App() {
     ({ exerciseId }) => exerciseId === exercise.id,
   )
   const latestAttempt = currentExerciseAttempts.at(-1)
+  const latestPossibleMisconception = latestAttempt
+    ? identifyDaxMisconception(
+        exercise,
+        latestAttempt.submittedAnswer,
+        latestAttempt.result,
+      )
+    : null
   const exerciseComplete = currentExerciseAttempts.some(
     ({ result }) => result === 'correct',
   )
@@ -332,13 +347,58 @@ function App() {
               </div>
               {agentSupport && (
                 <span className={`support-type ${agentSupport.type}`}>
-                  {agentSupport.type === 'socratic' ? 'Socratic' : 'Explanation'}
+                  {supportLabels[agentSupport.type]}
                 </span>
               )}
             </div>
             {agentSupport ? (
               <div className="agent-support-content">
-                <p>{agentSupport.text}</p>
+                {agentSupport.type === 'filter_trace' ? (
+                  <div className="filter-trace-content">
+                    <div>
+                      <strong>Before filters</strong>
+                      <ul>
+                        {agentSupport.beforeFilters.map((filter) => (
+                          <li key={filter}>{filter}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <strong>CALCULATE operation</strong>
+                      <code>{agentSupport.operation}</code>
+                    </div>
+                    {agentSupport.complete ? (
+                      <div>
+                        <strong>Established trace</strong>
+                        <ol>
+                          {agentSupport.establishedReasoning?.map((step) => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ol>
+                        <p className="trace-result">
+                          Established result: <strong>{agentSupport.result}</strong>
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <strong>Reasoning focus</strong>
+                        <ul>
+                          {agentSupport.focus.map((step) => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p>{agentSupport.text}</p>
+                )}
+                {agentSupport.possibleMisconception && (
+                  <p className="support-misconception">
+                    Possible misconception ·{' '}
+                    {agentSupport.possibleMisconception.id}
+                  </p>
+                )}
                 <small>
                   {agentSupport.exerciseId} ·{' '}
                   {agentSupport.learnerState.replace('_', ' ')}
@@ -356,6 +416,22 @@ function App() {
               <p className="feedback-kicker">Incorrect prediction</p>
               <h3>Not quite—try the context again.</h3>
               <p>{exercise.incorrectFeedback}</p>
+              {latestPossibleMisconception && (
+                <div
+                  className="possible-misconception"
+                  role="note"
+                  aria-label="Possible misconception"
+                >
+                  <span>
+                    Possible misconception · {latestPossibleMisconception.id}
+                  </span>
+                  <strong>{latestPossibleMisconception.label}</strong>
+                  <p>
+                    This answer is compatible with a known DAX reasoning
+                    pattern. This is a reasoning signal, not a diagnosis.
+                  </p>
+                </div>
+              )}
             </section>
           )}
 
@@ -425,18 +501,36 @@ function App() {
                 <span>{attempts.length}</span>
               </div>
               <ol>
-                {attempts.map((attempt) => (
-                  <li key={attempt.id}>
-                    <span>
-                      Attempt #{attempt.sequenceNumber}
-                      <small>{attempt.exerciseId}</small>
-                    </span>
-                    <strong>{attempt.submittedAnswer}</strong>
-                    <span className={`attempt-result ${attempt.result}`}>
-                      {attempt.result === 'correct' ? 'Correct' : 'Incorrect'}
-                    </span>
-                  </li>
-                ))}
+                {attempts.map((attempt) => {
+                  const attemptExercise = daxExercises.find(
+                    ({ id }) => id === attempt.exerciseId,
+                  )
+                  const possibleMisconception = attemptExercise
+                    ? identifyDaxMisconception(
+                        attemptExercise,
+                        attempt.submittedAnswer,
+                        attempt.result,
+                      )
+                    : null
+
+                  return (
+                    <li key={attempt.id}>
+                      <span>
+                        Attempt #{attempt.sequenceNumber}
+                        <small>{attempt.exerciseId}</small>
+                        {possibleMisconception && (
+                          <small className="attempt-misconception">
+                            {possibleMisconception.id} · Possible misconception
+                          </small>
+                        )}
+                      </span>
+                      <strong>{attempt.submittedAnswer}</strong>
+                      <span className={`attempt-result ${attempt.result}`}>
+                        {attempt.result === 'correct' ? 'Correct' : 'Incorrect'}
+                      </span>
+                    </li>
+                  )
+                })}
               </ol>
             </section>
           )}
