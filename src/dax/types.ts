@@ -64,6 +64,12 @@ export interface DaxFilterContext {
   value: string
 }
 
+export interface DaxSolvedContext {
+  modificationEffect: string
+  afterContext: string[]
+  visibleRows: string[]
+}
+
 export interface DaxExercise {
   id: string
   sequenceNumber: number
@@ -76,6 +82,7 @@ export interface DaxExercise {
   filterContext: DaxFilterContext[]
   measure: string
   filterOperation: string
+  solvedContext: DaxSolvedContext
   question: string
   expectedAnswer: number
   reasoningSteps: string[]

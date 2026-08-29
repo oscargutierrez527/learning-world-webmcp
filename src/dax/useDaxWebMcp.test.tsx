@@ -46,7 +46,9 @@ describe('useDaxWebMcp', () => {
     await user.type(screen.getByLabelText('Your numeric answer'), '250')
     await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
 
-    expect(screen.getByText('Incorrect prediction')).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: 'Learning World evaluation' }),
+    ).toHaveTextContent('250Incorrect')
     expect(
       screen.getByRole('region', { name: 'Attempt history' }),
     ).toBeInTheDocument()
@@ -149,10 +151,10 @@ describe('useDaxWebMcp', () => {
     render(<App />)
     await waitFor(() => expect(registerTool).toHaveBeenCalledTimes(7))
 
-    const supportRegion = screen.getByRole('region', { name: 'Agent support' })
-    expect(supportRegion).toHaveTextContent(
-      'No support has been requested for this exercise.',
-    )
+    expect(
+      screen.queryByRole('region', { name: 'AI Agent intervention' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(/A compatible external agent can observe this live state/)).toBeInTheDocument()
 
     const socraticTool = registeredTools.find(
       ({ name }) => name === 'request_socratic_intervention',
@@ -166,10 +168,14 @@ describe('useDaxWebMcp', () => {
     const filterTraceTool = registeredTools.find(
       ({ name }) => name === 'request_filter_trace',
     )
+    const explanationTool = registeredTools.find(
+      ({ name }) => name === 'request_explanation',
+    )
     expect(socraticTool).toBeDefined()
     expect(historyTool).toBeDefined()
     expect(progressTool).toBeDefined()
     expect(filterTraceTool).toBeDefined()
+    expect(explanationTool).toBeDefined()
 
     const executeOptions = { signal: new AbortController().signal }
     const progressBefore = await progressTool!.execute({}, executeOptions)
@@ -178,7 +184,16 @@ describe('useDaxWebMcp', () => {
       await Promise.resolve(socraticTool!.execute({}, executeOptions))
     })
 
-    expect(within(supportRegion).getByText('Socratic')).toBeInTheDocument()
+    let supportRegion = screen.getByRole('region', {
+      name: 'AI Agent intervention',
+    })
+    expect(within(supportRegion).getByText('Socratic').closest('li')).toHaveTextContent(
+      'Selected by AI Agent',
+    )
+    expect(supportRegion).toHaveTextContent('via WebMCP')
+    expect(supportRegion).toHaveTextContent(
+      'Assistance provided · Learning evidence unchanged',
+    )
     expect(supportRegion).toHaveTextContent('ALL(Sales[Region])')
     await expect(
       Promise.resolve(historyTool!.execute({}, executeOptions)),
@@ -191,10 +206,33 @@ describe('useDaxWebMcp', () => {
     ).not.toBeInTheDocument()
 
     await act(async () => {
+      await Promise.resolve(explanationTool!.execute({}, executeOptions))
+    })
+
+    supportRegion = screen.getByRole('region', {
+      name: 'AI Agent intervention',
+    })
+    expect(
+      within(supportRegion).getByText('Explanation').closest('li'),
+    ).toHaveTextContent('Selected by AI Agent')
+    expect(supportRegion).toHaveTextContent('via WebMCP')
+    await expect(
+      Promise.resolve(historyTool!.execute({}, executeOptions)),
+    ).resolves.toEqual({ empty: true, attempts: [] })
+    await expect(
+      Promise.resolve(progressTool!.execute({}, executeOptions)),
+    ).resolves.toEqual(progressBefore)
+
+    await act(async () => {
       await Promise.resolve(filterTraceTool!.execute({}, executeOptions))
     })
 
-    expect(within(supportRegion).getByText('Filter trace')).toBeInTheDocument()
+    supportRegion = screen.getByRole('region', {
+      name: 'AI Agent intervention',
+    })
+    expect(
+      within(supportRegion).getByText('Filter trace').closest('li'),
+    ).toHaveTextContent('Selected by AI Agent')
     expect(supportRegion).toHaveTextContent('Region = East')
     expect(supportRegion).toHaveTextContent('ALL(Sales[Region])')
     await expect(
@@ -209,6 +247,79 @@ describe('useDaxWebMcp', () => {
     expect(
       screen.getByRole('region', { name: 'Attempt history' }),
     ).toBeInTheDocument()
+  })
+
+  it('places a real post-error Socratic event between evaluation and learner retry', async () => {
+    const user = userEvent.setup()
+    const registeredTools: WebMCP.ModelContextTool[] = []
+    setDocumentModelContext({
+      registerTool: async (tool: WebMCP.ModelContextTool) =>
+        void registeredTools.push(tool),
+    })
+
+    render(<App />)
+    await waitFor(() => expect(registeredTools).toHaveLength(7))
+
+    await user.type(screen.getByLabelText('Your numeric answer'), '250')
+    await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
+
+    const executeOptions = { signal: new AbortController().signal }
+    const getTool = (name: string) =>
+      registeredTools.find((tool) => tool.name === name)!
+    const historyBefore = await getTool('get_attempt_history').execute(
+      {},
+      executeOptions,
+    )
+    const progressBefore = await getTool('get_learning_progress').execute(
+      {},
+      executeOptions,
+    )
+
+    await act(async () => {
+      await Promise.resolve(
+        getTool('request_socratic_intervention').execute({}, executeOptions),
+      )
+    })
+
+    const learnerAttempt = screen.getByRole('region', { name: 'Learner attempt' })
+    const evaluation = screen.getByRole('region', {
+      name: 'Learning World evaluation',
+    })
+    const agentEvent = screen.getByRole('region', {
+      name: 'AI Agent intervention',
+    })
+    const retry = screen.getByRole('region', {
+      name: 'Demonstrate the reasoning again',
+    })
+    const isBefore = (first: HTMLElement, second: HTMLElement) =>
+      Boolean(
+        first.compareDocumentPosition(second) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      )
+
+    expect(isBefore(learnerAttempt, evaluation)).toBe(true)
+    expect(isBefore(evaluation, agentEvent)).toBe(true)
+    expect(isBefore(agentEvent, retry)).toBe(true)
+    expect(agentEvent).toHaveTextContent(
+      'Attempt #1 · 250 · incorrectPossible M03',
+    )
+    expect(
+      within(agentEvent).getByText('Socratic').closest('li'),
+    ).toHaveTextContent('Selected by AI Agent')
+    expect(agentEvent).toHaveTextContent(
+      'Assistance provided · Learning evidence unchanged',
+    )
+
+    await expect(
+      Promise.resolve(
+        getTool('get_attempt_history').execute({}, executeOptions),
+      ),
+    ).resolves.toEqual(historyBefore)
+    await expect(
+      Promise.resolve(
+        getTool('get_learning_progress').execute({}, executeOptions),
+      ),
+    ).resolves.toEqual(progressBefore)
   })
 
   it('exposes restored state and then the fresh reset state through WebMCP', async () => {
@@ -271,6 +382,15 @@ describe('useDaxWebMcp', () => {
       missionComplete: false,
     })
 
+    await act(async () => {
+      await Promise.resolve(
+        getTool('request_explanation').execute({}, executeOptions),
+      )
+    })
+    expect(
+      screen.getByRole('region', { name: 'AI Agent intervention' }),
+    ).toHaveTextContent('Explanation intervention')
+
     await user.click(screen.getByRole('button', { name: 'Reset mission' }))
     await user.click(screen.getByRole('button', { name: 'Confirm reset' }))
 
@@ -298,6 +418,10 @@ describe('useDaxWebMcp', () => {
         missionComplete: false,
       })
     })
+    expect(
+      screen.queryByRole('region', { name: 'AI Agent intervention' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(/A compatible external agent can observe this live state/)).toBeInTheDocument()
   })
 
   it('does not persist Agent Support across a remount', async () => {
@@ -318,17 +442,18 @@ describe('useDaxWebMcp', () => {
         socraticTool.execute({}, { signal: new AbortController().signal }),
       )
     })
-    expect(screen.getByRole('region', { name: 'Agent support' })).toHaveTextContent(
-      'Socratic',
-    )
+    expect(
+      screen.getByRole('region', { name: 'AI Agent intervention' }),
+    ).toHaveTextContent('Socratic intervention')
 
     unmount()
     registeredTools.splice(0)
     render(<App />)
     await waitFor(() => expect(registeredTools).toHaveLength(7))
 
-    expect(screen.getByRole('region', { name: 'Agent support' })).toHaveTextContent(
-      'No support has been requested for this exercise.',
-    )
+    expect(
+      screen.queryByRole('region', { name: 'AI Agent intervention' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(/A compatible external agent can observe this live state/)).toBeInTheDocument()
   })
 })

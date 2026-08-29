@@ -19,7 +19,9 @@ import {
 } from './dax/persistence'
 import type { DaxAttempt } from './dax/types'
 
-const expectedAnswers = [450, 300, 300, 250, 250, 150, 50, 250, 500, 450, 200, 300]
+const expectedAnswers = [
+  450, 300, 300, 250, 250, 150, 50, 250, 500, 450, 200, 300,
+]
 
 async function solveCurrentExercise(
   user: ReturnType<typeof userEvent.setup>,
@@ -38,26 +40,83 @@ async function solveCurrentExercise(
   }
 }
 
+function isBefore(first: HTMLElement, second: HTMLElement) {
+  return Boolean(
+    first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+  )
+}
+
 afterEach(cleanup)
 beforeEach(() => localStorage.clear())
 
 describe('DAX learner attempt flow', () => {
-  it('records an incorrect valid prediction as Attempt #1 without revealing the answer', async () => {
+  it('opens with mission purpose, live actors, context, and learner action before global detail', () => {
+    render(<App />)
+
+    expect(
+      screen.getByText(
+        'Predict how CALCULATE changes the context around a measure.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Only evaluated learner attempts create evidence/),
+    ).toBeInTheDocument()
+
+    const actors = screen.getByRole('region', {
+      name: 'Live learning actors',
+    })
+    expect(actors).toHaveTextContent('LearnerPrediction required')
+    expect(actors).toHaveTextContent('Learning WorldAwaiting learner attempt')
+    expect(actors).toHaveTextContent(
+      'AI Agent · WebMCPWaiting for a WebMCP request',
+    )
+
+    const world = screen.getByRole('region', { name: 'Current DAX world' })
+    const prediction = screen.getByRole('region', {
+      name: 'Commit to a result',
+    })
+    const globalDetail = screen.getByText('View mission progress')
+    expect(isBefore(world, prediction)).toBe(true)
+    expect(isBefore(prediction, globalDetail)).toBe(true)
+    expect(screen.getByRole('button', { name: 'Submit prediction' })).toBeVisible()
+
+    expect(
+      screen.queryByRole('region', { name: 'AI Agent intervention' }),
+    ).not.toBeInTheDocument()
+    for (const mode of ['Socratic', 'Explanation', 'Filter trace']) {
+      expect(screen.queryByRole('button', { name: mode })).not.toBeInTheDocument()
+    }
+  })
+
+  it('keeps the earned result and solved context hidden before success', () => {
+    render(<App />)
+
+    expect(screen.queryByText(/^Why 450\?$/)).not.toBeInTheDocument()
+    expect(screen.queryByText('East / 100')).not.toBeInTheDocument()
+    expect(screen.queryByText('Region filter removed')).not.toBeInTheDocument()
+    expect(screen.queryByText('450')).not.toBeInTheDocument()
+  })
+
+  it('places a mapped incorrect evaluation directly after the learner attempt', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     await user.type(screen.getByLabelText('Your numeric answer'), '250')
     await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
 
-    const history = screen.getByRole('region', { name: 'Attempt history' })
-    const attempt = within(history).getByRole('listitem')
-    expect(attempt).toHaveTextContent('Attempt #1')
-    expect(attempt).toHaveTextContent('DAX-01')
-    expect(attempt).toHaveTextContent('250')
-    expect(attempt).toHaveTextContent('Incorrect')
-    expect(screen.getByText('Incorrect prediction')).toBeInTheDocument()
-    expect(screen.queryByText('Result')).not.toBeInTheDocument()
-    const possibleMisconception = screen.getByRole('note', {
+    const learnerAttempt = screen.getByRole('region', { name: 'Learner attempt' })
+    const evaluation = screen.getByRole('region', {
+      name: 'Learning World evaluation',
+    })
+    const retry = screen.getByRole('region', {
+      name: 'Demonstrate the reasoning again',
+    })
+    expect(learnerAttempt).toHaveTextContent('250Attempt #1DAX-01')
+    expect(evaluation).toHaveTextContent('250Incorrect')
+    expect(isBefore(learnerAttempt, evaluation)).toBe(true)
+    expect(isBefore(evaluation, retry)).toBe(true)
+
+    const possibleMisconception = within(evaluation).getByRole('note', {
       name: 'Possible misconception',
     })
     expect(possibleMisconception).toHaveTextContent('M03')
@@ -67,43 +126,70 @@ describe('DAX learner attempt flow', () => {
     expect(possibleMisconception).toHaveTextContent(
       'This is a reasoning signal, not a diagnosis.',
     )
+    expect(
+      screen.queryByRole('region', { name: 'AI Agent intervention' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Why 450\?$/)).not.toBeInTheDocument()
+
+    const history = screen.getByRole('region', { name: 'Attempt history' })
+    expect(within(history).getByRole('listitem')).toHaveTextContent(
+      'Attempt #1DAX-01M03 · Possible misconception250Incorrect',
+    )
   })
 
-  it('does not display a possible misconception for an unmapped wrong answer', async () => {
+  it('invents no misconception for an unmapped incorrect answer', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     await user.type(screen.getByLabelText('Your numeric answer'), '251')
     await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
 
-    expect(screen.getByText('Incorrect prediction')).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: 'Learning World evaluation' }),
+    ).toHaveTextContent('251Incorrect')
     expect(
       screen.queryByRole('note', { name: 'Possible misconception' }),
     ).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Why 450\?$/)).not.toBeInTheDocument()
   })
 
-  it('records a retry with 450 as Attempt #2 and shows deterministic reasoning', async () => {
+  it('records the retry, establishes evidence, and immediately reveals a vertical explanation', async () => {
     const user = userEvent.setup()
     render(<App />)
-    const answerInput = screen.getByLabelText('Your numeric answer')
 
-    await user.type(answerInput, '250')
-    await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
-    await user.type(answerInput, '450')
-    await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
+    await solveCurrentExercise(user, 250)
+    await solveCurrentExercise(user, 450)
 
     const history = screen.getByRole('region', { name: 'Attempt history' })
     const attempts = within(history).getAllByRole('listitem')
     expect(attempts).toHaveLength(2)
-    expect(attempts[1]).toHaveTextContent('Attempt #2')
-    expect(attempts[1]).toHaveTextContent('450')
-    expect(attempts[1]).toHaveTextContent('Correct')
-    expect(
-      screen.getByText('ALL(Sales[Region]) removes the Region filter.'),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('450', { selector: '.result-line strong' }),
-    ).toBeInTheDocument()
+    expect(attempts[1]).toHaveTextContent('Attempt #2DAX-01450Correct')
+
+    const learnerAttempt = screen.getByRole('region', { name: 'Learner attempt' })
+    const evaluation = screen.getByRole('region', {
+      name: 'Learning World evaluation',
+    })
+    const explanation = screen.getByRole('region', { name: 'Why 450?' })
+    expect(learnerAttempt).toHaveTextContent('450')
+    expect(evaluation).toHaveTextContent('450Correct')
+    expect(evaluation).toHaveTextContent('Evidence recordedS1 · S2')
+    expect(isBefore(learnerAttempt, evaluation)).toBe(true)
+    expect(isBefore(evaluation, explanation)).toBe(true)
+
+    const orderedStages = [
+      'Before CALCULATE',
+      'Filter modification',
+      'After CALCULATE',
+      'Visible rows',
+      'Result',
+    ].map((name) => within(explanation).getByRole('listitem', { name }))
+    orderedStages.slice(0, -1).forEach((stage, index) => {
+      expect(isBefore(stage, orderedStages[index + 1])).toBe(true)
+    })
+    expect(orderedStages[1]).toHaveTextContent(
+      'ALL(Sales[Region])Removes the existing filter on Sales[Region].',
+    )
+    expect(orderedStages[4]).toHaveTextContent('450')
   })
 
   it('does not create attempts for blank or invalid input', async () => {
@@ -134,10 +220,7 @@ describe('DAX learner attempt flow', () => {
     expect(
       screen.queryByRole('button', { name: 'Continue to exercise 2' }),
     ).not.toBeInTheDocument()
-
-    await user.type(screen.getByLabelText('Your numeric answer'), '250')
-    await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
-
+    await solveCurrentExercise(user, 250)
     expect(
       screen.queryByRole('button', { name: 'Continue to exercise 2' }),
     ).not.toBeInTheDocument()
@@ -159,13 +242,12 @@ describe('DAX learner attempt flow', () => {
     expect(within(history).getByRole('listitem')).toHaveTextContent('DAX-01')
   })
 
-  it('restores progress and a mapped incorrect attempt after remount', async () => {
+  it('restores progress, evidence, and a mapped incorrect attempt after remount', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App />)
 
     await solveCurrentExercise(user, 450, 2)
-    await user.type(screen.getByLabelText('Your numeric answer'), '0')
-    await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
+    await solveCurrentExercise(user, 0)
     await waitFor(() =>
       expect(localStorage.getItem(DAX_MISSION_STORAGE_KEY)).not.toBeNull(),
     )
@@ -176,24 +258,27 @@ describe('DAX learner attempt flow', () => {
     expect(
       screen.getByText('DAX-02', { selector: '.exercise-id strong' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('1 of 12 exercises solved')).toBeInTheDocument()
+    expect(screen.getByText('1/12 exercises · 2/8 skills')).toBeInTheDocument()
     expect(
-      screen
-        .getByRole('region', { name: 'Mission progress' })
-        .querySelector('.skill-count'),
-    ).toHaveTextContent('2 of 8 skills demonstrated')
-    const history = screen.getByRole('region', { name: 'Attempt history' })
-    expect(within(history).getAllByRole('listitem')).toHaveLength(2)
-    const possibleMisconception = screen.getByRole('note', {
-      name: 'Possible misconception',
-    })
-    expect(possibleMisconception).toHaveTextContent('M04')
+      screen.getByRole('region', { name: 'Learning World evaluation' }),
+    ).toHaveTextContent('0Incorrect')
+    expect(
+      screen.getByRole('note', { name: 'Possible misconception' }),
+    ).toHaveTextContent('M04')
+    expect(
+      within(
+        screen.getByRole('region', { name: 'Attempt history' }),
+      ).getAllByRole('listitem'),
+    ).toHaveLength(2)
+    expect(
+      screen.queryByRole('region', { name: 'AI Agent intervention' }),
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Mastery demonstrated' }),
     ).not.toBeInTheDocument()
   })
 
-  it('resets persisted completion to a fresh DAX-01 mission', async () => {
+  it('resets persisted completion to a clean DAX-01 causal flow', async () => {
     const user = userEvent.setup()
     const attempts: DaxAttempt[] = daxExercises.map((exercise, index) => ({
       id: `${exercise.id}-attempt-${index + 1}`,
@@ -208,6 +293,9 @@ describe('DAX learner attempt flow', () => {
     expect(
       screen.getByRole('heading', { name: 'Mastery demonstrated' }),
     ).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Why 300?' })).toHaveTextContent(
+      'Region filter removedSegment = Retail remains',
+    )
 
     await user.click(screen.getByRole('button', { name: 'Reset mission' }))
     const confirmation = screen.getByRole('alertdialog')
@@ -221,21 +309,15 @@ describe('DAX learner attempt flow', () => {
     expect(
       screen.getByText('DAX-01', { selector: '.exercise-id strong' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('0 of 12 exercises solved')).toBeInTheDocument()
-    expect(
-      screen
-        .getByRole('region', { name: 'Mission progress' })
-        .querySelector('.skill-count'),
-    ).toHaveTextContent('0 of 8 skills demonstrated')
+    expect(screen.getByText('0/12 exercises · 0/8 skills')).toBeInTheDocument()
     expect(
       screen.queryByRole('region', { name: 'Attempt history' }),
     ).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Why 450\?$/)).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('heading', { name: 'Mastery demonstrated' }),
+      screen.queryByRole('region', { name: 'AI Agent intervention' }),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Agent support' })).toHaveTextContent(
-      'No support has been requested for this exercise.',
-    )
+    expect(screen.getByRole('region', { name: 'Commit to a result' })).toBeVisible()
     expect(localStorage.getItem(DAX_MISSION_STORAGE_KEY)).toBeNull()
   })
 
@@ -276,17 +358,16 @@ describe('DAX learner attempt flow', () => {
       )
     }
 
-    const transferRemaining = screen.getByText('Transfer challenge remaining')
-    expect(transferRemaining.closest('.skill-count')).toHaveTextContent(
-      '8 of 8 skills demonstrated',
-    )
-    expect(screen.getByText('11 of 12 exercises solved')).toBeInTheDocument()
+    const missionStatus = screen.getByLabelText('Mission status')
+    expect(missionStatus).toHaveTextContent('Skills8 / 8')
+    expect(missionStatus).toHaveTextContent('TransferPending')
+    expect(screen.getByText('11/12 exercises · 8/8 skills')).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Mastery demonstrated' }),
     ).not.toBeInTheDocument()
   }, 15000)
 
-  it('completes the 12-exercise mission only after the full evaluated flow', async () => {
+  it('completes the mission only after all 12 evaluated learner attempts', async () => {
     const user = userEvent.setup()
     render(<App />)
 
@@ -301,14 +382,14 @@ describe('DAX learner attempt flow', () => {
     expect(
       screen.getByRole('heading', { name: 'Mastery demonstrated' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('12 of 12 exercises solved')).toBeInTheDocument()
-
-    const evidenceSummary = screen.getByRole('list', {
-      name: 'Mastery evidence summary',
-    })
-    expect(within(evidenceSummary).getAllByRole('listitem')).toHaveLength(8)
-
-    const history = screen.getByRole('region', { name: 'Attempt history' })
-    expect(within(history).getAllByRole('listitem')).toHaveLength(12)
+    expect(screen.getByText('12/12 exercises · 8/8 skills')).toBeInTheDocument()
+    expect(screen.getByLabelText('Mission status')).toHaveTextContent(
+      'TransferDemonstrated',
+    )
+    expect(
+      within(
+        screen.getByRole('region', { name: 'Attempt history' }),
+      ).getAllByRole('listitem'),
+    ).toHaveLength(12)
   }, 20000)
 })

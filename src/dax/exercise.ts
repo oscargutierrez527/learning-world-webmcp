@@ -50,6 +50,11 @@ export const daxExercises: DaxExercise[] = [
     ALL(Sales[Region])
 )`,
     filterOperation: 'ALL(Sales[Region])',
+    solvedContext: {
+      modificationEffect: 'Removes the existing filter on Sales[Region].',
+      afterContext: ['Region filter removed'],
+      visibleRows: ['East / 100', 'West / 200', 'East / 150'],
+    },
     question:
       'What result will this measure return under the current filter context?',
     expectedAnswer: 450,
@@ -87,6 +92,11 @@ export const daxExercises: DaxExercise[] = [
     Sales[Region] = "West"
 )`,
     filterOperation: 'Sales[Region] = "West"',
+    solvedContext: {
+      modificationEffect: 'Replaces Region = East with Region = West.',
+      afterContext: ['Region = West (replaces East)'],
+      visibleRows: ['West / 300'],
+    },
     question: 'What result will this measure return?',
     expectedAnswer: 300,
     reasoningSteps: [
@@ -121,6 +131,12 @@ export const daxExercises: DaxExercise[] = [
     ALL(Sales[Region])
 )`,
     filterOperation: 'ALL(Sales[Region])',
+    solvedContext: {
+      modificationEffect:
+        'Removes the Region filter only; filters on other columns remain.',
+      afterContext: ['Region filter removed', 'Channel = Online remains'],
+      visibleRows: ['East / Online / 100', 'West / Online / 200'],
+    },
     question: 'What result will this measure return?',
     expectedAnswer: 300,
     reasoningSteps: [
@@ -160,6 +176,15 @@ export const daxExercises: DaxExercise[] = [
     Sales[Region] = "West"
 )`,
     filterOperation: 'Sales[Region] = "West"',
+    solvedContext: {
+      modificationEffect:
+        'Replaces Region = East with West while preserving Channel.',
+      afterContext: [
+        'Region = West (replaces East)',
+        'Channel = Online remains',
+      ],
+      visibleRows: ['West / Online / 250'],
+    },
     question: 'What result will this measure return?',
     expectedAnswer: 250,
     reasoningSteps: [
@@ -199,6 +224,12 @@ export const daxExercises: DaxExercise[] = [
     ALL(Transactions[Channel])
 )`,
     filterOperation: 'ALL(Transactions[Channel])',
+    solvedContext: {
+      modificationEffect:
+        'Removes the Channel filter only; Market remains active.',
+      afterContext: ['Market = North remains', 'Channel filter removed'],
+      visibleRows: ['North / Online / 110', 'North / Partner / 140'],
+    },
     question: 'What result will this measure return?',
     expectedAnswer: 250,
     reasoningSteps: [
@@ -230,6 +261,12 @@ export const daxExercises: DaxExercise[] = [
     Sales[Channel] = "Store"
 )`,
     filterOperation: 'Sales[Channel] = "Store"',
+    solvedContext: {
+      modificationEffect:
+        'Adds Channel = Store to the existing Region context.',
+      afterContext: ['Region = East remains', 'Channel = Store added'],
+      visibleRows: ['East / Store / 150'],
+    },
     question: 'What result will this measure return?',
     expectedAnswer: 150,
     reasoningSteps: [
@@ -266,6 +303,15 @@ export const daxExercises: DaxExercise[] = [
 )`,
     filterOperation:
       'Sales[Region] = "West"; Sales[Channel] = "Store"',
+    solvedContext: {
+      modificationEffect:
+        'Applies both same-column replacements to build the new context.',
+      afterContext: [
+        'Region = West (replaces East)',
+        'Channel = Store (replaces Online)',
+      ],
+      visibleRows: ['West / Store / 50'],
+    },
     question: 'What result will this measure return?',
     expectedAnswer: 50,
     reasoningSteps: [
@@ -301,6 +347,14 @@ export const daxExercises: DaxExercise[] = [
 )`,
     filterOperation:
       'KEEPFILTERS(Sales[Region] IN { "East", "West" })',
+    solvedContext: {
+      modificationEffect:
+        'Intersects the supplied Region set with the existing East filter.',
+      afterContext: [
+        'Region = East (intersection of East with {East, West})',
+      ],
+      visibleRows: ['East / 100', 'East / 150'],
+    },
     question: 'What result will this measure return?',
     expectedAnswer: 250,
     reasoningSteps: [
@@ -336,6 +390,17 @@ export const daxExercises: DaxExercise[] = [
     ALL(Sales)
 )`,
     filterOperation: 'ALL(Sales)',
+    solvedContext: {
+      modificationEffect:
+        'Removes filters from the entire Sales table, not one column.',
+      afterContext: ['Region filter removed', 'Channel filter removed'],
+      visibleRows: [
+        'East / Online / 100',
+        'East / Store / 150',
+        'West / Online / 200',
+        'West / Store / 50',
+      ],
+    },
     question: 'What result will this measure return?',
     expectedAnswer: 500,
     reasoningSteps: [
@@ -397,6 +462,15 @@ export const daxExercises: DaxExercise[] = [
     ALL(Customers[Region])
 )`,
     filterOperation: 'ALL(Customers[Region])',
+    solvedContext: {
+      modificationEffect:
+        'Removes the Customers Region filter that had propagated to Sales.',
+      afterContext: [
+        'Customers[Region] filter removed',
+        'Customers → Sales no longer limits Sales by Region',
+      ],
+      visibleRows: ['C1 / 100', 'C2 / 150', 'C3 / 200'],
+    },
     question: 'What result will this measure return?',
     expectedAnswer: 450,
     reasoningSteps: [
@@ -434,6 +508,15 @@ export const daxExercises: DaxExercise[] = [
 )`,
     filterOperation:
       'ALL(Sales[Region]); Sales[Channel] = "Store"',
+    solvedContext: {
+      modificationEffect:
+        'Removes Region and replaces the Channel filter with Store.',
+      afterContext: [
+        'Region filter removed',
+        'Channel = Store (replaces Online)',
+      ],
+      visibleRows: ['East / Store / 150', 'West / Store / 50'],
+    },
     question: 'What result will this measure return?',
     expectedAnswer: 200,
     reasoningSteps: [
@@ -473,6 +556,12 @@ export const daxExercises: DaxExercise[] = [
     ALL(Orders[Region])
 )`,
     filterOperation: 'ALL(Orders[Region])',
+    solvedContext: {
+      modificationEffect:
+        'Removes the Orders Region filter while preserving Segment.',
+      afterContext: ['Region filter removed', 'Segment = Retail remains'],
+      visibleRows: ['North / Retail / 90', 'South / Retail / 210'],
+    },
     question: 'What result will this measure return?',
     expectedAnswer: 300,
     reasoningSteps: [
