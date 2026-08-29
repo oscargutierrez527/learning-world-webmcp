@@ -7,15 +7,22 @@ import type {
 } from './types'
 
 export const requiredDaxSkills: DaxSkill[] = [
-  { id: 'S1', name: 'Read existing filter context' },
-  { id: 'S2', name: 'Understand ALL removing a column filter' },
+  { id: 'S1', name: 'Read active filter context' },
+  { id: 'S2', name: 'Understand removal of a column filter' },
   {
     id: 'S3',
-    name: 'Understand CALCULATE replacing a same-column filter',
+    name: 'Understand replacement of an existing same-column filter',
   },
   {
     id: 'S4',
-    name: 'Understand unrelated filters remain after one filter is removed',
+    name: 'Understand preservation of unrelated filters',
+  },
+  { id: 'S5', name: 'Understand adding/combining CALCULATE filters' },
+  { id: 'S6', name: 'Understand KEEPFILTERS intersection behavior' },
+  { id: 'S7', name: 'Understand filter-removal scope: column vs table' },
+  {
+    id: 'S8',
+    name: 'Trace filter propagation through a model relationship',
   },
 ]
 
@@ -55,7 +62,7 @@ export function isDaxMissionMastered(
     demonstratedSkillIds.has(id),
   )
   const transferDemonstrated = evidence.some(
-    ({ exerciseId }) => exerciseId === 'C2-04',
+    ({ exerciseId }) => exerciseId === 'DAX-12',
   )
 
   return allRequiredSkillsDemonstrated && transferDemonstrated

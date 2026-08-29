@@ -41,6 +41,13 @@ function getCurrentExerciseResult(snapshot: DaxWebMcpSnapshot) {
 
 function inspectFilterContextResult(snapshot: DaxWebMcpSnapshot) {
   const exercise = getCurrentExercise(snapshot)
+  const relatedDatasets = exercise.relatedDatasets?.map((dataset) => ({
+    name: dataset.name,
+    columns: dataset.columns.map(({ key, label }) => ({ key, label })),
+    rows: dataset.rows.map((row) =>
+      Object.fromEntries(dataset.columns.map(({ key }) => [key, row[key]])),
+    ),
+  }))
 
   return {
     exerciseId: exercise.id,
@@ -57,6 +64,10 @@ function inspectFilterContextResult(snapshot: DaxWebMcpSnapshot) {
       column,
       value,
     })),
+    ...(relatedDatasets ? { relatedDatasets } : {}),
+    ...(exercise.relationship
+      ? { relationship: { ...exercise.relationship } }
+      : {}),
     measure: exercise.measure,
   }
 }
@@ -86,7 +97,7 @@ function getLearningProgressResult(snapshot: DaxWebMcpSnapshot) {
       .map(({ exerciseId }) => exerciseId),
   )
   const transferDemonstrated = evidence.some(
-    ({ exerciseId }) => exerciseId === 'C2-04',
+    ({ exerciseId }) => exerciseId === 'DAX-12',
   )
   const mastery = isDaxMissionMastered(evidence)
 
@@ -112,7 +123,7 @@ function getLearningProgressResult(snapshot: DaxWebMcpSnapshot) {
       .filter(({ id }) => !demonstratedSkillIds.has(id))
       .map(({ id }) => id),
     transferRequirement: {
-      exerciseId: 'C2-04',
+      exerciseId: 'DAX-12',
       status: transferDemonstrated ? 'demonstrated' : 'pending',
     },
     mastery,

@@ -1,19 +1,46 @@
 export type DaxAttemptResult = 'correct' | 'incorrect'
 
-export type DaxSkillId = 'S1' | 'S2' | 'S3' | 'S4'
+export type DaxSkillId =
+  | 'S1'
+  | 'S2'
+  | 'S3'
+  | 'S4'
+  | 'S5'
+  | 'S6'
+  | 'S7'
+  | 'S8'
 
-export type DaxDataColumnKey = 'region' | 'channel' | 'segment' | 'amount'
+export type DaxDataColumnKey =
+  | 'region'
+  | 'channel'
+  | 'segment'
+  | 'market'
+  | 'customerId'
+  | 'amount'
 
 export interface DaxDataColumn {
   key: DaxDataColumnKey
   label: string
 }
 
-export interface DaxDataRow {
-  region: string
-  channel?: string
-  segment?: string
-  amount: number
+export type DaxDataRow = Partial<
+  Record<DaxDataColumnKey, string | number>
+>
+
+export interface DaxDataset {
+  name: string
+  columns: DaxDataColumn[]
+  rows: DaxDataRow[]
+}
+
+export interface DaxModelRelationship {
+  fromTable: string
+  fromColumn: string
+  fromCardinality: 'one'
+  toTable: string
+  toColumn: string
+  toCardinality: 'many'
+  filterDirection: string
 }
 
 export interface DaxFilterContext {
@@ -28,6 +55,8 @@ export interface DaxExercise {
   datasetName: string
   dataColumns: DaxDataColumn[]
   dataRows: DaxDataRow[]
+  relatedDatasets?: DaxDataset[]
+  relationship?: DaxModelRelationship
   filterContext: DaxFilterContext[]
   measure: string
   question: string

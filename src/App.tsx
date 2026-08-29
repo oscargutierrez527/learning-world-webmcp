@@ -8,8 +8,59 @@ import {
   isDaxMissionMastered,
   requiredDaxSkills,
 } from './dax/learning'
-import type { DaxAgentSupport, DaxAttempt } from './dax/types'
+import type {
+  DaxAgentSupport,
+  DaxAttempt,
+  DaxDataColumn,
+  DaxDataRow,
+} from './dax/types'
 import { useDaxWebMcp } from './dax/useDaxWebMcp'
+
+interface DaxDatasetTableProps {
+  name: string
+  columns: DaxDataColumn[]
+  rows: DaxDataRow[]
+  exerciseId: string
+}
+
+function DaxDatasetTable({
+  name,
+  columns,
+  rows,
+  exerciseId,
+}: DaxDatasetTableProps) {
+  return (
+    <div className="data-card">
+      <div className="card-label">
+        <span>Dataset</span>
+        <strong>{name}</strong>
+      </div>
+      <table>
+        <caption className="sr-only">
+          {name} data for {exerciseId}
+        </caption>
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th scope="col" key={column.key}>
+                {column.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={`${exerciseId}-${name}-row-${rowIndex}`}>
+              {columns.map((column) => (
+                <td key={column.key}>{row[column.key]}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
 function App() {
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0)
@@ -162,35 +213,12 @@ function App() {
           </div>
 
           <div className="context-grid">
-            <div className="data-card">
-              <div className="card-label">
-                <span>Dataset</span>
-                <strong>{exercise.datasetName}</strong>
-              </div>
-              <table>
-                <caption className="sr-only">
-                  {exercise.datasetName} data for {exercise.id}
-                </caption>
-                <thead>
-                  <tr>
-                    {exercise.dataColumns.map((column) => (
-                      <th scope="col" key={column.key}>
-                        {column.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {exercise.dataRows.map((row, rowIndex) => (
-                    <tr key={`${exercise.id}-row-${rowIndex}`}>
-                      {exercise.dataColumns.map((column) => (
-                        <td key={column.key}>{row[column.key]}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DaxDatasetTable
+              name={exercise.datasetName}
+              columns={exercise.dataColumns}
+              rows={exercise.dataRows}
+              exerciseId={exercise.id}
+            />
 
             <div className="filter-card">
               <p className="card-label">Current filter context</p>
@@ -206,6 +234,42 @@ function App() {
               <p className="filter-note">Applied before the measure is evaluated</p>
             </div>
           </div>
+
+          {exercise.relatedDatasets && exercise.relationship && (
+            <section className="model-context" aria-label="DAX model relationship">
+              {exercise.relatedDatasets.map((dataset) => (
+                <DaxDatasetTable
+                  key={dataset.name}
+                  name={dataset.name}
+                  columns={dataset.columns}
+                  rows={dataset.rows}
+                  exerciseId={exercise.id}
+                />
+              ))}
+              <div className="relationship-card">
+                <p className="card-label">Model relationship</p>
+                <div className="relationship-path">
+                  <strong>
+                    {exercise.relationship.fromTable}[
+                    {exercise.relationship.fromColumn}]
+                  </strong>
+                  <span>
+                    {exercise.relationship.fromCardinality === 'one' ? '1' : ''}{' '}
+                    →{' '}
+                    {exercise.relationship.toCardinality === 'many' ? '*' : ''}
+                  </span>
+                  <strong>
+                    {exercise.relationship.toTable}[
+                    {exercise.relationship.toColumn}]
+                  </strong>
+                </div>
+                <p>
+                  Single-direction filtering:{' '}
+                  <strong>{exercise.relationship.filterDirection}</strong>
+                </p>
+              </div>
+            </section>
+          )}
 
           <div className="measure-card">
             <div className="measure-heading">

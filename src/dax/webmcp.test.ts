@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { daxExercises } from './exercise'
 import {
   deriveDaxLearningEvidence,
   isDaxMissionMastered,
@@ -28,6 +29,12 @@ function attempt(
   }
 }
 
+function correctAttemptsThrough(count: number): DaxAttempt[] {
+  return daxExercises.slice(0, count).map((exercise, index) =>
+    attempt(exercise.id, exercise.expectedAnswer, 'correct', index + 1),
+  )
+}
+
 async function executeTool(
   name: string,
   snapshot: DaxWebMcpSnapshot,
@@ -41,7 +48,7 @@ async function executeTool(
 }
 
 describe('DAX WebMCP tool contracts', () => {
-  it('exposes exactly the six intended DAX tools', () => {
+  it('exposes exactly the same six intended DAX tools', () => {
     const tools = createDaxWebMcpTools(() => ({
       currentExerciseIndex: 0,
       attempts: [],
@@ -81,7 +88,7 @@ describe('DAX WebMCP tool contracts', () => {
   it('does not expose mutation tools or mutate the supplied learning snapshot', async () => {
     const snapshot: DaxWebMcpSnapshot = {
       currentExerciseIndex: 0,
-      attempts: [attempt('C2-01', 250, 'incorrect', 1)],
+      attempts: [attempt('DAX-01', 250, 'incorrect', 1)],
     }
     const beforeExecution = structuredClone(snapshot)
     const tools = createDaxWebMcpTools(() => snapshot)
@@ -94,7 +101,7 @@ describe('DAX WebMCP tool contracts', () => {
     )
   })
 
-  it('does not leak the current exercise answer or hidden reasoning', async () => {
+  it('reports DAX-01 as exercise 1 of 12 without leaking its answer', async () => {
     const result = await executeTool('get_current_exercise', {
       currentExerciseIndex: 0,
       attempts: [],
@@ -102,9 +109,9 @@ describe('DAX WebMCP tool contracts', () => {
     const serialized = JSON.stringify(result)
 
     expect(result).toMatchObject({
-      exerciseId: 'C2-01',
+      exerciseId: 'DAX-01',
       exerciseNumber: 1,
-      totalExercises: 4,
+      totalExercises: 12,
       solved: false,
     })
     expect(serialized).not.toContain('expectedAnswer')
@@ -120,9 +127,38 @@ describe('DAX WebMCP tool contracts', () => {
     const serialized = JSON.stringify(result)
 
     expect(result).toMatchObject({
-      exerciseId: 'C2-01',
+      exerciseId: 'DAX-01',
       dataset: { name: 'Sales' },
       activeFilterContext: [{ column: 'Region', value: 'East' }],
+    })
+    expect(serialized).not.toContain('expectedAnswer')
+    expect(serialized).not.toContain('reasoningSteps')
+    expect(serialized).not.toContain('450')
+  })
+
+  it('exposes DAX-10 relationship context without leaking its answer', async () => {
+    const result = await executeTool('inspect_filter_context', {
+      currentExerciseIndex: 9,
+      attempts: correctAttemptsThrough(9),
+    })
+    const serialized = JSON.stringify(result)
+
+    expect(result).toMatchObject({
+      exerciseId: 'DAX-10',
+      dataset: { name: 'Customers' },
+      relatedDatasets: [{ name: 'Sales' }],
+      activeFilterContext: [
+        { column: 'Customers[Region]', value: 'East' },
+      ],
+      relationship: {
+        fromTable: 'Customers',
+        fromColumn: 'CustomerID',
+        fromCardinality: 'one',
+        toTable: 'Sales',
+        toColumn: 'CustomerID',
+        toCardinality: 'many',
+        filterDirection: 'Customers → Sales',
+      },
     })
     expect(serialized).not.toContain('expectedAnswer')
     expect(serialized).not.toContain('reasoningSteps')
@@ -141,7 +177,7 @@ describe('DAX WebMCP tool contracts', () => {
   it('returns the actual attempt state supplied by the learner flow', async () => {
     const result = await executeTool('get_attempt_history', {
       currentExerciseIndex: 0,
-      attempts: [attempt('C2-01', 250, 'incorrect', 1)],
+      attempts: [attempt('DAX-01', 250, 'incorrect', 1)],
     })
 
     expect(result).toEqual({
@@ -149,7 +185,7 @@ describe('DAX WebMCP tool contracts', () => {
       attempts: [
         {
           sequenceNumber: 1,
-          exerciseId: 'C2-01',
+          exerciseId: 'DAX-01',
           submittedAnswer: 250,
           evaluation: 'incorrect',
         },
@@ -157,22 +193,27 @@ describe('DAX WebMCP tool contracts', () => {
     })
   })
 
-  it('reports all skills demonstrated but transfer pending before C2-04', async () => {
+  it('reports all S1-S8 demonstrated but transfer pending before DAX-12', async () => {
     const result = await executeTool('get_learning_progress', {
-      currentExerciseIndex: 2,
-      attempts: [
-        attempt('C2-01', 450, 'correct', 1),
-        attempt('C2-02', 300, 'correct', 2),
-        attempt('C2-03', 300, 'correct', 3),
-      ],
+      currentExerciseIndex: 10,
+      attempts: correctAttemptsThrough(11),
     })
 
     expect(result).toMatchObject({
-      exercises: { solved: 3, total: 4 },
-      demonstratedSkillIds: ['S1', 'S2', 'S3', 'S4'],
+      exercises: { solved: 11, total: 12 },
+      demonstratedSkillIds: [
+        'S1',
+        'S2',
+        'S3',
+        'S4',
+        'S5',
+        'S6',
+        'S7',
+        'S8',
+      ],
       remainingSkillIds: [],
       transferRequirement: {
-        exerciseId: 'C2-04',
+        exerciseId: 'DAX-12',
         status: 'pending',
       },
       mastery: false,
@@ -180,25 +221,36 @@ describe('DAX WebMCP tool contracts', () => {
     })
   })
 
-  it('reports mastery only after successful C2-04 transfer evidence', async () => {
+  it('reports mastery and mission completion after all 12 correct attempts', async () => {
     const result = await executeTool('get_learning_progress', {
-      currentExerciseIndex: 3,
-      attempts: [
-        attempt('C2-01', 450, 'correct', 1),
-        attempt('C2-02', 300, 'correct', 2),
-        attempt('C2-03', 300, 'correct', 3),
-        attempt('C2-04', 300, 'correct', 4),
-      ],
+      currentExerciseIndex: 11,
+      attempts: correctAttemptsThrough(12),
     })
 
     expect(result).toMatchObject({
-      exercises: { solved: 4, total: 4 },
+      exercises: { solved: 12, total: 12 },
       transferRequirement: {
-        exerciseId: 'C2-04',
+        exerciseId: 'DAX-12',
         status: 'demonstrated',
       },
       mastery: true,
       missionComplete: true,
+    })
+  })
+
+  it('keeps mission completion false when mastery exists but an exercise is unsolved', async () => {
+    const attempts = correctAttemptsThrough(12).filter(
+      ({ exerciseId }) => exerciseId !== 'DAX-05',
+    )
+    const result = await executeTool('get_learning_progress', {
+      currentExerciseIndex: 11,
+      attempts,
+    })
+
+    expect(result).toMatchObject({
+      exercises: { solved: 11, total: 12 },
+      mastery: true,
+      missionComplete: false,
     })
   })
 
@@ -211,7 +263,7 @@ describe('DAX WebMCP tool contracts', () => {
 
     expect(result).toMatchObject({
       type: 'socratic',
-      exerciseId: 'C2-01',
+      exerciseId: 'DAX-01',
       learnerState: 'not_attempted',
     })
     expect(serialized).toContain('ALL(Sales[Region])')
@@ -226,12 +278,12 @@ describe('DAX WebMCP tool contracts', () => {
     })
     const afterIncorrect = await executeTool('request_socratic_intervention', {
       currentExerciseIndex: 0,
-      attempts: [attempt('C2-01', 250, 'incorrect', 1)],
+      attempts: [attempt('DAX-01', 250, 'incorrect', 1)],
     })
     const serialized = JSON.stringify(afterIncorrect)
 
     expect(afterIncorrect).toMatchObject({
-      exerciseId: 'C2-01',
+      exerciseId: 'DAX-01',
       learnerState: 'incorrect',
     })
     expect(afterIncorrect.text).not.toBe(beforeAttempt.text)
@@ -242,18 +294,44 @@ describe('DAX WebMCP tool contracts', () => {
   it('explains an unsolved concept without returning its numeric result', async () => {
     const result = await executeTool('request_explanation', {
       currentExerciseIndex: 0,
-      attempts: [attempt('C2-01', 250, 'incorrect', 1)],
+      attempts: [attempt('DAX-01', 250, 'incorrect', 1)],
     })
     const serialized = JSON.stringify(result)
 
     expect(result).toMatchObject({
       type: 'explanation',
-      exerciseId: 'C2-01',
+      exerciseId: 'DAX-01',
       learnerState: 'incorrect',
     })
     expect(serialized).toContain('modified filter context')
     expect(serialized).not.toContain('expectedAnswer')
     expect(serialized).not.toContain('450')
+  })
+
+  it('provides exercise-specific Socratic and explanation support for all 12', async () => {
+    for (const [currentExerciseIndex, exercise] of daxExercises.entries()) {
+      const snapshot = { currentExerciseIndex, attempts: [] }
+      const socratic = await executeTool(
+        'request_socratic_intervention',
+        snapshot,
+      )
+      const explanation = await executeTool('request_explanation', snapshot)
+
+      expect(socratic).toMatchObject({
+        exerciseId: exercise.id,
+        learnerState: 'not_attempted',
+      })
+      expect(explanation).toMatchObject({
+        exerciseId: exercise.id,
+        learnerState: 'not_attempted',
+      })
+      expect(String(socratic.text).length).toBeGreaterThan(20)
+      expect(String(explanation.text).length).toBeGreaterThan(20)
+      expect(String(socratic.text)).not.toContain(String(exercise.expectedAnswer))
+      expect(String(explanation.text)).not.toContain(
+        String(exercise.expectedAnswer),
+      )
+    }
   })
 
   it('uses the current exercise when choosing intervention content', async () => {
@@ -276,8 +354,8 @@ describe('DAX WebMCP tool contracts', () => {
       executeOptions,
     )) as Record<string, unknown>
 
-    expect(exerciseOne.exerciseId).toBe('C2-01')
-    expect(exerciseTwo.exerciseId).toBe('C2-02')
+    expect(exerciseOne.exerciseId).toBe('DAX-01')
+    expect(exerciseTwo.exerciseId).toBe('DAX-02')
     expect(exerciseTwo.text).toContain('same Region column')
     expect(exerciseTwo.text).not.toBe(exerciseOne.text)
   })
@@ -285,7 +363,7 @@ describe('DAX WebMCP tool contracts', () => {
   it('changes only support state and cannot create attempts, evidence, or mastery', async () => {
     const snapshot: DaxWebMcpSnapshot = {
       currentExerciseIndex: 0,
-      attempts: [attempt('C2-01', 250, 'incorrect', 1)],
+      attempts: [attempt('DAX-01', 250, 'incorrect', 1)],
     }
     const beforeAttempts = structuredClone(snapshot.attempts)
     const beforeEvidence = deriveDaxLearningEvidence(snapshot.attempts)

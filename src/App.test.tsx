@@ -6,6 +6,25 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import App from './App'
 
+const expectedAnswers = [450, 300, 300, 250, 250, 150, 50, 250, 500, 450, 200, 300]
+
+async function solveCurrentExercise(
+  user: ReturnType<typeof userEvent.setup>,
+  answer: number,
+  nextExerciseNumber?: number,
+) {
+  await user.type(screen.getByLabelText('Your numeric answer'), String(answer))
+  await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
+
+  if (nextExerciseNumber) {
+    await user.click(
+      screen.getByRole('button', {
+        name: `Continue to exercise ${nextExerciseNumber}`,
+      }),
+    )
+  }
+}
+
 afterEach(cleanup)
 
 describe('DAX learner attempt flow', () => {
@@ -19,6 +38,7 @@ describe('DAX learner attempt flow', () => {
     const history = screen.getByRole('region', { name: 'Attempt history' })
     const attempt = within(history).getByRole('listitem')
     expect(attempt).toHaveTextContent('Attempt #1')
+    expect(attempt).toHaveTextContent('DAX-01')
     expect(attempt).toHaveTextContent('250')
     expect(attempt).toHaveTextContent('Incorrect')
     expect(screen.getByText('Incorrect prediction')).toBeInTheDocument()
@@ -85,7 +105,7 @@ describe('DAX learner attempt flow', () => {
       screen.queryByRole('button', { name: 'Continue to exercise 2' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByText('C2-01', { selector: '.exercise-id strong' }),
+      screen.getByText('DAX-01', { selector: '.exercise-id strong' }),
     ).toBeInTheDocument()
   })
 
@@ -93,73 +113,85 @@ describe('DAX learner attempt flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.type(screen.getByLabelText('Your numeric answer'), '450')
-    await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
-    await user.click(
-      screen.getByRole('button', { name: 'Continue to exercise 2' }),
-    )
+    await solveCurrentExercise(user, 450, 2)
 
     expect(
-      screen.getByText('C2-02', { selector: '.exercise-id strong' }),
+      screen.getByText('DAX-02', { selector: '.exercise-id strong' }),
     ).toBeInTheDocument()
     const history = screen.getByRole('region', { name: 'Attempt history' })
-    expect(within(history).getByRole('listitem')).toHaveTextContent('C2-01')
+    expect(within(history).getByRole('listitem')).toHaveTextContent('DAX-01')
   })
 
-  it('does not complete the mission when all skills are shown before transfer', async () => {
+  it('renders both datasets and the model relationship on DAX-10', async () => {
     const user = userEvent.setup()
     render(<App />)
 
-    for (const [index, answer] of [450, 300, 300].entries()) {
-      await user.type(screen.getByLabelText('Your numeric answer'), String(answer))
-      await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
+    for (let index = 0; index < 9; index += 1) {
+      await solveCurrentExercise(user, expectedAnswers[index], index + 2)
+    }
 
-      if (index < 2) {
-        await user.click(
-          screen.getByRole('button', {
-            name: `Continue to exercise ${index + 2}`,
-          }),
-        )
-      }
+    expect(
+      screen.getByText('DAX-10', { selector: '.exercise-id strong' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('table', { name: 'Customers data for DAX-10' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('table', { name: 'Sales data for DAX-10' }),
+    ).toBeInTheDocument()
+    const relationship = screen.getByRole('region', {
+      name: 'DAX model relationship',
+    })
+    expect(relationship).toHaveTextContent('Customers[CustomerID]')
+    expect(relationship).toHaveTextContent('Sales[CustomerID]')
+    expect(relationship).toHaveTextContent('Customers → Sales')
+  }, 15000)
+
+  it('keeps mastery false with all eight skills demonstrated before transfer', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    for (let index = 0; index < 11; index += 1) {
+      await solveCurrentExercise(
+        user,
+        expectedAnswers[index],
+        index < 10 ? index + 2 : undefined,
+      )
     }
 
     const transferRemaining = screen.getByText('Transfer challenge remaining')
     expect(transferRemaining.closest('.skill-count')).toHaveTextContent(
-      '4 of 4 skills demonstrated',
+      '8 of 8 skills demonstrated',
     )
+    expect(screen.getByText('11 of 12 exercises solved')).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Mastery demonstrated' }),
     ).not.toBeInTheDocument()
-  })
+  }, 15000)
 
-  it('completes the four-exercise mission only after the full evaluated flow', async () => {
+  it('completes the 12-exercise mission only after the full evaluated flow', async () => {
     const user = userEvent.setup()
     render(<App />)
 
-    for (const [index, answer] of [450, 300, 300, 300].entries()) {
-      await user.type(screen.getByLabelText('Your numeric answer'), String(answer))
-      await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
-
-      if (index < 3) {
-        await user.click(
-          screen.getByRole('button', {
-            name: `Continue to exercise ${index + 2}`,
-          }),
-        )
-      }
+    for (const [index, answer] of expectedAnswers.entries()) {
+      await solveCurrentExercise(
+        user,
+        answer,
+        index < expectedAnswers.length - 1 ? index + 2 : undefined,
+      )
     }
 
     expect(
       screen.getByRole('heading', { name: 'Mastery demonstrated' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('4 of 4 exercises solved')).toBeInTheDocument()
+    expect(screen.getByText('12 of 12 exercises solved')).toBeInTheDocument()
 
     const evidenceSummary = screen.getByRole('list', {
       name: 'Mastery evidence summary',
     })
-    expect(within(evidenceSummary).getAllByRole('listitem')).toHaveLength(4)
+    expect(within(evidenceSummary).getAllByRole('listitem')).toHaveLength(8)
 
     const history = screen.getByRole('region', { name: 'Attempt history' })
-    expect(within(history).getAllByRole('listitem')).toHaveLength(4)
-  })
+    expect(within(history).getAllByRole('listitem')).toHaveLength(12)
+  }, 20000)
 })

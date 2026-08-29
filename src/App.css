@@ -305,9 +305,17 @@
   gap: 14px;
 }
 
+.model-context {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+
 .data-card,
 .filter-card,
-.measure-card {
+.measure-card,
+.relationship-card {
   border: 1px solid var(--line);
   border-radius: 16px;
 }
@@ -370,6 +378,34 @@ td:last-child {
 
 tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.relationship-card {
+  display: flex;
+  min-height: 225px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 22px;
+  background: var(--green-light);
+  color: var(--ink);
+}
+
+.relationship-path {
+  display: grid;
+  gap: 8px;
+  margin: 22px 0;
+  font-size: 0.85rem;
+}
+
+.relationship-path span {
+  color: var(--green);
+  font-weight: 900;
+}
+
+.relationship-card > p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
 }
 
 .filter-card {
@@ -965,8 +1001,13 @@ footer span {
     grid-template-columns: 1fr;
   }
 
+  .model-context {
+    grid-template-columns: 1fr;
+  }
+
   .data-card,
-  .filter-card {
+  .filter-card,
+  .relationship-card {
     min-height: 0;
   }
 

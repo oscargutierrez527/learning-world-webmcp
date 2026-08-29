@@ -99,8 +99,8 @@ describe('useDaxWebMcp', () => {
     ).resolves.toEqual({ empty: true, attempts: [] })
 
     const learnerAttempt: DaxAttempt = {
-      id: 'C2-01-attempt-1',
-      exerciseId: 'C2-01',
+      id: 'DAX-01-attempt-1',
+      exerciseId: 'DAX-01',
       submittedAnswer: 250,
       result: 'incorrect',
       sequenceNumber: 1,
@@ -123,7 +123,7 @@ describe('useDaxWebMcp', () => {
       attempts: [
         {
           sequenceNumber: 1,
-          exerciseId: 'C2-01',
+          exerciseId: 'DAX-01',
           submittedAnswer: 250,
           evaluation: 'incorrect',
         },
