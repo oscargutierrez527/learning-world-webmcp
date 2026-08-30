@@ -36,6 +36,15 @@ interface DaxAgentSupportEvent {
   observedAttempt: DaxAttempt | null
 }
 
+type AgentStageState = 'completed' | 'active' | 'waiting' | 'not-required'
+
+const agentStageLabels: Record<AgentStageState, string> = {
+  completed: '✓ Completed',
+  active: '● Active',
+  waiting: '○ Waiting',
+  'not-required': '— Not required',
+}
+
 const supportLabels: Record<DaxSupportMode, string> = {
   socratic: 'Socratic',
   explanation: 'Explanation',
@@ -100,7 +109,7 @@ function DaxSolvedTransformation({ exercise }: { exercise: DaxExercise }) {
             Why {exercise.expectedAnswer}?
           </h2>
         </div>
-        <p>Unlocked by the correct evaluated learner attempt above.</p>
+        <p>Unlocked by your correct evaluated attempt.</p>
       </div>
 
       <ol className="transformation-stages" aria-label="Earned DAX explanation">
@@ -118,7 +127,7 @@ function DaxSolvedTransformation({ exercise }: { exercise: DaxExercise }) {
             </ul>
             {exercise.relationship && (
               <p className="relationship-effect">
-                {exercise.relationship.filterDirection} propagates this context.
+                {exercise.relationship.filterDirection} propagates the context.
               </p>
             )}
           </div>
@@ -174,51 +183,14 @@ function DaxSolvedTransformation({ exercise }: { exercise: DaxExercise }) {
         </article>
       </ol>
 
-      <div className="deterministic-reasoning">
-        <strong>Deterministic reasoning</strong>
+      <details className="deterministic-reasoning">
+        <summary>Review deterministic reasoning</summary>
         <ol>
           {exercise.reasoningSteps.map((step) => (
             <li key={step}>{step}</li>
           ))}
         </ol>
-      </div>
-    </section>
-  )
-}
-
-function FlowConnector() {
-  return (
-    <div className="flow-connector" aria-hidden="true">
-      <span>↓</span>
-    </div>
-  )
-}
-
-function DaxAttemptEvent({
-  attempt,
-  retry = false,
-}: {
-  attempt: DaxAttempt
-  retry?: boolean
-}) {
-  return (
-    <section className="flow-event learner-event" aria-label="Learner attempt">
-      <div className="flow-event-heading">
-        <span className="actor-mark learner-mark" aria-hidden="true">
-          L
-        </span>
-        <div>
-          <p className="eyebrow">Learner · {retry ? 'Retry submitted' : 'Prediction submitted'}</p>
-          <h2>Authoritative learner attempt</h2>
-        </div>
-      </div>
-      <div className="attempt-lockup">
-        <strong>{attempt.submittedAnswer}</strong>
-        <p>
-          Attempt #{attempt.sequenceNumber}
-          <span>{attempt.exerciseId}</span>
-        </p>
-      </div>
+      </details>
     </section>
   )
 }
@@ -239,151 +211,380 @@ function DaxEvaluationEvent({
 
   return (
     <section
-      className={`flow-event world-event ${attempt.result}`}
+      className={`loop-event world-event ${attempt.result}`}
       aria-label="Learning World evaluation"
       aria-live="polite"
     >
-      <div className="flow-event-heading">
+      <div className="event-actor">
         <span className="actor-mark world-mark" aria-hidden="true">
           ◈
         </span>
-        <div>
-          <p className="eyebrow">Learning World · Deterministic evaluation</p>
-          <h2>{correct ? 'Evidence established' : 'Prediction evaluated'}</h2>
+        <p>
+          <strong>Learning World</strong>
+          <small>Attempt #{attempt.sequenceNumber} · deterministic evaluation</small>
+        </p>
+      </div>
+
+      <div className="evaluation-body">
+        <div className="evaluation-lockup">
+          <small>Learner answer</small>
+          <strong>{attempt.submittedAnswer}</strong>
+          <span>{correct ? 'Correct' : 'Incorrect'}</span>
         </div>
-      </div>
 
-      <div className="evaluation-lockup">
-        <strong>{attempt.submittedAnswer}</strong>
-        <span>{correct ? 'Correct' : 'Incorrect'}</span>
-      </div>
-
-      {correct ? (
-        <>
-          <p>
-            This evaluated learner attempt—not assistance—demonstrated the
-            exercise skills.
-          </p>
+        {correct ? (
           <div className="evidence-earned">
-            <span>Evidence recorded</span>
+            <span>Evidence established</span>
             <strong>{exercise.skillIds.join(' · ')}</strong>
+            <small>Created by the learner's evaluated attempt.</small>
           </div>
-        </>
-      ) : (
-        <>
-          <p className="deterministic-feedback">{exercise.incorrectFeedback}</p>
-          {possibleMisconception && (
-            <div
-              className="possible-misconception"
-              role="note"
-              aria-label="Possible misconception"
-            >
-              <span>Possible misconception · {possibleMisconception.id}</span>
-              <strong>{possibleMisconception.label}</strong>
-              <p>
-                This answer is compatible with a known DAX reasoning pattern.
-                This is a reasoning signal, not a diagnosis.
-              </p>
-            </div>
-          )}
-        </>
-      )}
+        ) : (
+          <div className="incorrect-guidance">
+            <p className="deterministic-feedback">{exercise.incorrectFeedback}</p>
+            {possibleMisconception && (
+              <div
+                className="possible-misconception"
+                role="note"
+                aria-label="Possible misconception"
+              >
+                <span>Possible misconception · {possibleMisconception.id}</span>
+                <strong>{possibleMisconception.label}</strong>
+                <small>Compatible pattern · not a diagnosis</small>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </section>
   )
 }
 
-function DaxAgentEvent({ event }: { event: DaxAgentSupportEvent }) {
-  const { support, observedAttempt } = event
+function DaxSupportContent({ support }: { support: DaxAgentSupport }) {
+  if (support.type !== 'filter_trace') {
+    return <p className="support-copy">{support.text}</p>
+  }
 
   return (
+    <div className="filter-trace-content">
+      <div>
+        <strong>Before filters</strong>
+        <ul>
+          {support.beforeFilters.map((filter) => (
+            <li key={filter}>{filter}</li>
+          ))}
+        </ul>
+      </div>
+      <div>
+        <strong>CALCULATE operation</strong>
+        <code>{support.operation}</code>
+      </div>
+      {support.complete ? (
+        <div>
+          <strong>Established trace</strong>
+          <ol>
+            {support.establishedReasoning?.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+          <p className="trace-result">
+            Established result: <strong>{support.result}</strong>
+          </p>
+        </div>
+      ) : (
+        <div>
+          <strong>Reasoning focus</strong>
+          <ul>
+            {support.focus.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DaxDeliveredAssistance({ event }: { event: DaxAgentSupportEvent }) {
+  return (
     <section
-      className="flow-event agent-event"
+      className="loop-event delivered-assistance"
       aria-label="AI Agent intervention"
       aria-live="polite"
     >
-      <div className="flow-event-heading">
+      <div className="event-actor">
         <span className="actor-mark agent-mark" aria-hidden="true">
           ✦
         </span>
-        <div>
-          <p className="eyebrow">AI Agent · via WebMCP</p>
-          <h2>{supportLabels[support.type]} intervention</h2>
-        </div>
-      </div>
-
-      <div className="agent-observation">
-        <span>Observed live state</span>
-        <strong>{support.exerciseId}</strong>
         <p>
-          {observedAttempt
-            ? `Attempt #${observedAttempt.sequenceNumber} · ${observedAttempt.submittedAnswer} · ${observedAttempt.result}`
-            : 'No learner attempt yet'}
+          <strong>AI Agent · via WebMCP</strong>
+          <small>Selected intervention · {supportLabels[event.support.type]}</small>
         </p>
-        {support.possibleMisconception && (
-          <p>Possible {support.possibleMisconception.id}</p>
-        )}
       </div>
-
-      <ul className="support-modes" aria-label="Agent assistance capabilities">
-        {supportModes.map((mode) => {
-          const selected = support.type === mode
-          return (
-            <li key={mode} className={selected ? 'selected' : ''}>
-              <span aria-hidden="true">{selected ? '●' : '○'}</span>
-              <strong>{supportLabels[mode]}</strong>
-              <small>{selected ? 'Selected by AI Agent' : 'Not selected'}</small>
-            </li>
-          )
-        })}
-      </ul>
-
-      <div className="agent-support-content">
-        {support.type === 'filter_trace' ? (
-          <div className="filter-trace-content">
-            <div>
-              <strong>Before filters</strong>
-              <ul>
-                {support.beforeFilters.map((filter) => (
-                  <li key={filter}>{filter}</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <strong>CALCULATE operation</strong>
-              <code>{support.operation}</code>
-            </div>
-            {support.complete ? (
-              <div>
-                <strong>Established trace</strong>
-                <ol>
-                  {support.establishedReasoning?.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
-                <p className="trace-result">
-                  Established result: <strong>{support.result}</strong>
-                </p>
-              </div>
-            ) : (
-              <div>
-                <strong>Reasoning focus</strong>
-                <ul>
-                  {support.focus.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className="support-copy">{support.text}</p>
-        )}
+      <div className="delivered-support-body">
+        <DaxSupportContent support={event.support} />
+        <p className="support-authority">
+          Assistance delivered · learning evidence unchanged
+        </p>
       </div>
-
-      <p className="support-authority">
-        Assistance provided · Learning evidence unchanged
-      </p>
     </section>
+  )
+}
+
+function AgentTraceStage({
+  number,
+  label,
+  state,
+  children,
+}: {
+  number: string
+  label: string
+  state: AgentStageState
+  children: React.ReactNode
+}) {
+  return (
+    <li
+      className={`agent-stage ${state}`}
+      aria-current={state === 'active' ? 'step' : undefined}
+    >
+      <div className="agent-stage-marker" aria-hidden="true">
+        <span>{number}</span>
+      </div>
+      <div className="agent-stage-body">
+        <div className="agent-stage-heading">
+          <strong>{label}</strong>
+          <span>{agentStageLabels[state]}</span>
+        </div>
+        {children}
+      </div>
+    </li>
+  )
+}
+
+function DaxAgentRail({
+  exercise,
+  latestAttempt,
+  supportEvent,
+  attempts,
+  demonstratedSkillCount,
+  transferDemonstrated,
+  missionMastered,
+  missionComplete,
+}: {
+  exercise: DaxExercise
+  latestAttempt: DaxAttempt | undefined
+  supportEvent: DaxAgentSupportEvent | null
+  attempts: DaxAttempt[]
+  demonstratedSkillCount: number
+  transferDemonstrated: boolean
+  missionMastered: boolean
+  missionComplete: boolean
+}) {
+  const support = supportEvent?.support
+  const currentMisconception = latestAttempt
+    ? identifyDaxMisconception(
+        exercise,
+        latestAttempt.submittedAnswer,
+        latestAttempt.result,
+      )
+    : null
+  const observeState: AgentStageState =
+    latestAttempt || support ? 'completed' : 'active'
+  const contextState: AgentStageState = latestAttempt
+    ? 'completed'
+    : support
+      ? 'completed'
+      : 'waiting'
+  const selectionState: AgentStageState = support
+    ? 'completed'
+    : latestAttempt?.result === 'incorrect'
+      ? 'active'
+      : latestAttempt?.result === 'correct'
+        ? 'not-required'
+        : 'waiting'
+  const assistState: AgentStageState = support
+    ? 'completed'
+    : latestAttempt?.result === 'correct'
+      ? 'not-required'
+      : 'waiting'
+  const supportObservedDifferentAttempt = Boolean(
+    supportEvent?.observedAttempt &&
+      latestAttempt &&
+      supportEvent.observedAttempt.id !== latestAttempt.id,
+  )
+  const currentState = missionComplete
+    ? 'Mission evidence complete'
+    : latestAttempt?.result === 'correct'
+      ? `Evidence established from learner Attempt #${latestAttempt.sequenceNumber} · next exercise available`
+      : support && latestAttempt?.result === 'incorrect'
+        ? `${supportLabels[support.type]} assistance delivered · learner retry required`
+        : support
+          ? `${supportLabels[support.type]} assistance delivered · learner prediction required`
+        : latestAttempt?.result === 'incorrect'
+          ? 'Waiting for AI agent intervention'
+          : 'Learner action required'
+
+  return (
+    <aside className="agent-rail" aria-label="AI Agent live path">
+      <header className="agent-rail-header">
+        <div className="agent-identity">
+          <span className="actor-mark agent-mark" aria-hidden="true">
+            ✦
+          </span>
+          <div>
+            <p>AI Agent · WebMCP</p>
+            <h2>Live assistance path</h2>
+          </div>
+        </div>
+        <span className="live-indicator">Live state</span>
+      </header>
+
+      <p className="agent-rail-intro">
+        A compatible external agent can observe this world and choose a bounded
+        support capability. The learner does not choose the mode.
+      </p>
+
+      <ol className="agent-trace" aria-label="Observable agent path">
+        <AgentTraceStage number="1" label="Observe" state={observeState}>
+          {latestAttempt ? (
+            <p>
+              <strong>{exercise.id}</strong>
+              Attempt #{latestAttempt.sequenceNumber} ·{' '}
+              {latestAttempt.submittedAnswer} · {latestAttempt.result}
+            </p>
+          ) : support ? (
+            <p>
+              <strong>{exercise.id}</strong>
+              Current exercise · no attempt yet
+            </p>
+          ) : (
+            <p>Waiting for learner attempt</p>
+          )}
+        </AgentTraceStage>
+
+        <AgentTraceStage
+          number="2"
+          label="Context signal"
+          state={contextState}
+        >
+          {currentMisconception ? (
+            <div className="rail-signal">
+              <strong>Possible {currentMisconception.id}</strong>
+              <p>{currentMisconception.label}</p>
+              <small>Compatible pattern · not a diagnosis</small>
+            </div>
+          ) : latestAttempt ? (
+            <p>
+              {latestAttempt.result === 'correct'
+                ? 'No misconception signal on the correct attempt'
+                : 'No mapped signal for this answer'}
+            </p>
+          ) : support?.possibleMisconception ? (
+            <p>Possible {support.possibleMisconception.id}</p>
+          ) : support ? (
+            <p>Pre-attempt exercise context available</p>
+          ) : (
+            <p>Waiting for evaluated learner state</p>
+          )}
+        </AgentTraceStage>
+
+        <AgentTraceStage
+          number="3"
+          label="Select intervention"
+          state={selectionState}
+        >
+          {selectionState === 'not-required' ? (
+            <p>Learner demonstrated the result without assistance.</p>
+          ) : (
+            <>
+              {selectionState === 'active' && (
+                <div className="agent-waiting-callout">
+                  <strong>Waiting for AI agent</strong>
+                  <small>Live learner state is available through WebMCP.</small>
+                </div>
+              )}
+              <ul className="support-modes" aria-label="Agent assistance capabilities">
+                {supportModes.map((mode) => {
+                  const selected = support?.type === mode
+                  return (
+                    <li key={mode} className={selected ? 'selected' : ''}>
+                      <span aria-hidden="true">{selected ? '●' : '○'}</span>
+                      <strong>{supportLabels[mode]}</strong>
+                    </li>
+                  )
+                })}
+              </ul>
+              {support && (
+                <p className="selection-attribution">
+                  Selected by AI Agent · via WebMCP
+                </p>
+              )}
+            </>
+          )}
+        </AgentTraceStage>
+
+        <AgentTraceStage number="4" label="Assist" state={assistState}>
+          {support ? (
+            <div className="rail-assistance">
+              <p>
+                <strong>{supportLabels[support.type]}</strong>
+                {supportObservedDifferentAttempt &&
+                  supportEvent?.observedAttempt &&
+                  ` · delivered for Attempt #${supportEvent.observedAttempt.sequenceNumber}`}
+              </p>
+              <DaxSupportContent support={support} />
+            </div>
+          ) : assistState === 'not-required' ? (
+            <p>Exercise solved before any intervention was invoked.</p>
+          ) : (
+            <p>Waiting for an agent capability invocation</p>
+          )}
+        </AgentTraceStage>
+      </ol>
+
+      <section className="rail-current-state" aria-label="Current agent state">
+        <span>Current state</span>
+        <strong>{currentState}</strong>
+      </section>
+
+      <section className="impact-summary" aria-label="Learning impact summary">
+        <div className="impact-heading">
+          <span>Authoritative learning state</span>
+          <small>Derived live</small>
+        </div>
+        <dl>
+          <div>
+            <dt>Learner attempts</dt>
+            <dd>{attempts.length}</dd>
+          </div>
+          <div>
+            <dt>Evidence</dt>
+            <dd>{demonstratedSkillCount} / {requiredDaxSkills.length} skills</dd>
+          </div>
+          <div>
+            <dt>Transfer</dt>
+            <dd>{transferDemonstrated ? 'Demonstrated' : 'Pending'}</dd>
+          </div>
+          <div>
+            <dt>Mastery</dt>
+            <dd>{missionMastered ? 'Demonstrated' : 'Pending'}</dd>
+          </div>
+        </dl>
+        {latestAttempt?.result === 'correct' && (
+          <p className="latest-evidence">
+            Latest evidence · {exercise.skillIds.join(' · ')} · learner Attempt #{latestAttempt.sequenceNumber}
+          </p>
+        )}
+        {support && (
+          <p className="assistance-impact">
+            Assistance impact · attempts unchanged · evidence unchanged · mastery unchanged.
+          </p>
+        )}
+      </section>
+
+      <p className="rail-authority">
+        Agent assistance ≠ learning evidence
+      </p>
+    </aside>
   )
 }
 
@@ -426,6 +627,9 @@ function App() {
   )
   const evidence = deriveDaxLearningEvidence(attempts)
   const demonstratedSkillIds = getDemonstratedDaxSkillIds(evidence)
+  const transferDemonstrated = evidence.some(
+    ({ exerciseId }) => exerciseId === 'DAX-12',
+  )
   const missionMastered = isDaxMissionMastered(evidence)
   const missionComplete =
     missionMastered && solvedExerciseIds.size === daxExercises.length
@@ -491,54 +695,31 @@ function App() {
 
   const support = agentSupportEvent?.support
   const observedSupportAttempt = agentSupportEvent?.observedAttempt ?? null
-  const supportFollowsIncorrectAttempt =
-    support?.learnerState === 'incorrect' &&
-    observedSupportAttempt?.result === 'incorrect'
-  const latestAttemptFollowsSupport = Boolean(
-    latestAttempt &&
-      observedSupportAttempt &&
-      latestAttempt.id !== observedSupportAttempt.id,
+  const supportMatchesLatestAttempt = Boolean(
+    support &&
+      latestAttempt &&
+      observedSupportAttempt?.id === latestAttempt.id,
   )
-  const learnerStatus = exerciseComplete
-    ? 'Attempt demonstrated'
-    : latestAttempt?.result === 'incorrect'
-      ? 'Retry required'
-      : 'Prediction required'
-  const worldStatus = exerciseComplete
-    ? 'Evidence established'
-    : latestAttempt?.result === 'incorrect'
-      ? 'Incorrect evaluated'
-      : 'Awaiting learner attempt'
-  const agentStatus = support
-    ? `${supportLabels[support.type]} provided`
-    : 'Waiting for a WebMCP request'
 
   const predictionStage = (
     <section
-      className={`flow-event prediction-stage ${latestAttempt ? 'retry-stage' : ''}`}
+      className={`prediction-stage ${latestAttempt ? 'retry-stage' : ''}`}
       aria-labelledby="prediction-title"
     >
-      <div className="flow-event-heading">
-        <span className="actor-mark learner-mark" aria-hidden="true">
-          L
-        </span>
-        <div>
-          <p className="eyebrow">
-            Learner · {latestAttempt ? 'Retry' : 'Make a prediction'}
+      <div className="prediction-heading">
+        <div className="event-actor">
+          <span className="actor-mark learner-mark" aria-hidden="true">
+            L
+          </span>
+          <p>
+            <strong>Learner · {latestAttempt ? 'Your retry' : 'Your prediction'}</strong>
+            <small>Your response creates learning evidence.</small>
           </p>
-          <h2 id="prediction-title">
-            {latestAttempt ? 'Demonstrate the reasoning again' : 'Commit to a result'}
-          </h2>
         </div>
+        <h2 id="prediction-title">
+          {latestAttempt ? 'Demonstrate the reasoning again' : 'Commit to a result'}
+        </h2>
       </div>
-
-      <p className="question">{exercise.question}</p>
-      {latestAttempt && (
-        <p className="retry-guidance">
-          Assistance and feedback can guide you. Only your next evaluated
-          prediction can create evidence.
-        </p>
-      )}
 
       <form onSubmit={submitPrediction} noValidate>
         <label htmlFor="prediction">Your numeric answer</label>
@@ -568,40 +749,34 @@ function App() {
 
   return (
     <main className="learning-shell">
-      <header className="mission-header">
-        <div className="mission-intro">
-          <p className="eyebrow">Guided DAX mission</p>
+      <header className="product-header">
+        <div className="brand-block">
+          <p className="brand-name">Learning World</p>
+          <nav aria-label="Course breadcrumb">
+            <span>Power BI</span>
+            <span aria-hidden="true">›</span>
+            <span>DAX</span>
+            <span aria-hidden="true">›</span>
+            <strong>CALCULATE</strong>
+          </nav>
           <h1>DAX CALCULATE &amp; Filter Context</h1>
-          <p className="mission-purpose">
-            Predict how CALCULATE changes the context around a measure.
-          </p>
-          <p className="mission-contract">
-            A compatible AI agent can adapt assistance through WebMCP. Only
-            evaluated learner attempts create evidence.
-          </p>
+          <p>Adaptive assistance. Fixed evidence standard.</p>
         </div>
-        <div className="mission-actions">
+
+        <div className="header-actions">
           <div className="mission-counters" aria-label="Mission status">
             <p>
               <span>Exercise</span>
-              <strong>
-                {currentExerciseIndex + 1} / {daxExercises.length}
-              </strong>
+              <strong>{currentExerciseIndex + 1} / {daxExercises.length}</strong>
             </p>
             <p>
               <span>Skills</span>
-              <strong>
-                {demonstratedSkillIds.size} / {requiredDaxSkills.length}
-              </strong>
+              <strong>{demonstratedSkillIds.size} / {requiredDaxSkills.length}</strong>
             </p>
             <p>
               <span>Transfer</span>
-              <strong>{missionMastered ? 'Demonstrated' : 'Pending'}</strong>
+              <strong>{transferDemonstrated ? 'Demonstrated' : 'Pending'}</strong>
             </p>
-          </div>
-          <div className="exercise-id" aria-label={`Exercise ${exercise.id}`}>
-            <span>Current challenge</span>
-            <strong>{exercise.id}</strong>
           </div>
           <button
             type="button"
@@ -614,245 +789,203 @@ function App() {
       </header>
 
       {resetConfirmationOpen && (
-        <section
-          className="reset-confirmation"
-          role="alertdialog"
-          aria-labelledby="reset-mission-title"
-          aria-describedby="reset-mission-description"
-        >
-          <div>
-            <p className="eyebrow">Reset mission</p>
-            <h2 id="reset-mission-title">Start again from DAX-01?</h2>
-            <p id="reset-mission-description">
-              This clears all locally saved attempts and mission progress.
-            </p>
-          </div>
-          <div className="reset-confirmation-actions">
-            <button type="button" className="confirm-reset" onClick={resetMission}>
-              Confirm reset
-            </button>
-            <button
-              type="button"
-              className="cancel-reset"
-              onClick={() => setResetConfirmationOpen(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        </section>
+        <div className="reset-backdrop">
+          <section
+            className="reset-confirmation"
+            role="alertdialog"
+            aria-labelledby="reset-mission-title"
+            aria-describedby="reset-mission-description"
+          >
+            <div>
+              <p className="eyebrow">Reset mission</p>
+              <h2 id="reset-mission-title">Start again from DAX-01?</h2>
+              <p id="reset-mission-description">
+                This clears all locally saved attempts and mission progress.
+              </p>
+            </div>
+            <div className="reset-confirmation-actions">
+              <button type="button" className="confirm-reset" onClick={resetMission}>
+                Confirm reset
+              </button>
+              <button
+                type="button"
+                className="cancel-reset"
+                onClick={() => setResetConfirmationOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
       )}
 
-      <section className="live-actor-strip" aria-label="Live learning actors">
-        <div className={!exerciseComplete ? 'next-actor' : 'has-event'}>
-          <span className="actor-mark learner-mark" aria-hidden="true">L</span>
-          <p><strong>Learner</strong><small>{learnerStatus}</small></p>
-        </div>
-        <span className="actor-arrow" aria-hidden="true">→</span>
-        <div className={latestAttempt ? 'has-event' : ''}>
-          <span className="actor-mark world-mark" aria-hidden="true">◈</span>
-          <p><strong>Learning World</strong><small>{worldStatus}</small></p>
-        </div>
-        <span className="actor-arrow" aria-hidden="true">→</span>
-        <div className={support ? 'has-event agent-active' : ''}>
-          <span className="actor-mark agent-mark" aria-hidden="true">✦</span>
-          <p><strong>AI Agent · WebMCP</strong><small>{agentStatus}</small></p>
-        </div>
-      </section>
-
-      <section className="learning-flow" aria-label="Current learning flow">
-        <section
-          className="world-context"
-          aria-label="Current DAX world"
-        >
-          <div className="section-heading">
-            <span className="step-number">01</span>
+      <section className="workspace-layout" aria-label="Live learning workspace">
+        <section className="learner-workspace" aria-label="Learning workspace">
+          <header className="challenge-header">
+            <div className="exercise-id" aria-label={`Exercise ${exercise.id}`}>
+              <span>{exercise.id}</span>
+              <small>Current challenge</small>
+            </div>
             <div>
-              <p className="eyebrow">Understand the context · {exercise.stageLabel}</p>
-              <h2 id="challenge-title">What world is the measure evaluated in?</h2>
+              <p className="eyebrow">{exercise.stageLabel}</p>
+              <h2>{exercise.question}</h2>
             </div>
-          </div>
-
-          <div className="world-data-grid">
-            <DaxDatasetTable
-              name={exercise.datasetName}
-              columns={exercise.dataColumns}
-              rows={exercise.dataRows}
-              exerciseId={exercise.id}
-            />
-
-            <div className="filter-card">
-              <p className="card-label">Current filter context</p>
-              <div className="filter-values">
-                {exercise.filterContext.map((filter) => (
-                  <div className="filter-value" key={filter.column}>
-                    <span>{filter.column}</span>
-                    <span aria-hidden="true">=</span>
-                    <strong>{filter.value}</strong>
-                  </div>
-                ))}
-              </div>
-              <p className="filter-note">Applied before the measure is evaluated</p>
+            <div className="learner-authority">
+              <span aria-hidden="true">L → ◈</span>
+              <p>Learner predicts · Learning World evaluates</p>
             </div>
+          </header>
 
-            <div className="measure-card">
-              <div className="measure-heading">
-                <p className="card-label">Measure</p>
-                <span>DAX</span>
-              </div>
-              <pre>
-                <code>{exercise.measure}</code>
-              </pre>
+          <section className="world-context" aria-label="Current DAX world">
+            <div className="context-heading">
+              <p>
+                <span aria-hidden="true">◆</span>
+                Current DAX world
+              </p>
+              <small>Read the context before predicting.</small>
             </div>
-          </div>
+            <div className="world-data-grid">
+              <DaxDatasetTable
+                name={exercise.datasetName}
+                columns={exercise.dataColumns}
+                rows={exercise.dataRows}
+                exerciseId={exercise.id}
+              />
 
-          {exercise.relatedDatasets && exercise.relationship && (
-            <section className="model-context" aria-label="DAX model relationship">
-              {exercise.relatedDatasets.map((dataset) => (
-                <DaxDatasetTable
-                  key={dataset.name}
-                  name={dataset.name}
-                  columns={dataset.columns}
-                  rows={dataset.rows}
-                  exerciseId={exercise.id}
-                />
-              ))}
-              <div className="relationship-card">
-                <p className="card-label">Model relationship</p>
-                <div className="relationship-path">
-                  <strong>
-                    {exercise.relationship.fromTable}[
-                    {exercise.relationship.fromColumn}]
-                  </strong>
-                  <span>
-                    {exercise.relationship.fromCardinality === 'one' ? '1' : ''}{' '}
-                    →{' '}
-                    {exercise.relationship.toCardinality === 'many' ? '*' : ''}
-                  </span>
-                  <strong>
-                    {exercise.relationship.toTable}[
-                    {exercise.relationship.toColumn}]
-                  </strong>
+              <div className="filter-card">
+                <p className="card-label">Active filters</p>
+                <div className="filter-values">
+                  {exercise.filterContext.map((filter) => (
+                    <div className="filter-value" key={filter.column}>
+                      <span>{filter.column}</span>
+                      <span aria-hidden="true">=</span>
+                      <strong>{filter.value}</strong>
+                    </div>
+                  ))}
                 </div>
-                <p>
-                  Single-direction filtering:{' '}
-                  <strong>{exercise.relationship.filterDirection}</strong>
-                </p>
+                <small>Active before CALCULATE</small>
               </div>
-            </section>
-          )}
 
+              <div className="measure-card">
+                <div className="measure-heading">
+                  <p className="card-label">DAX measure</p>
+                  <span>DAX</span>
+                </div>
+                <pre>
+                  <code>{exercise.measure}</code>
+                </pre>
+              </div>
+            </div>
+
+            {exercise.relatedDatasets && exercise.relationship && (
+              <section className="model-context" aria-label="DAX model relationship">
+                {exercise.relatedDatasets.map((dataset) => (
+                  <DaxDatasetTable
+                    key={dataset.name}
+                    name={dataset.name}
+                    columns={dataset.columns}
+                    rows={dataset.rows}
+                    exerciseId={exercise.id}
+                  />
+                ))}
+                <div className="relationship-card">
+                  <p className="card-label">Model relationship</p>
+                  <div className="relationship-path">
+                    <strong>
+                      {exercise.relationship.fromTable}[
+                      {exercise.relationship.fromColumn}]
+                    </strong>
+                    <span>
+                      {exercise.relationship.fromCardinality === 'one' ? '1' : ''}{' '}
+                      →{' '}
+                      {exercise.relationship.toCardinality === 'many' ? '*' : ''}
+                    </span>
+                    <strong>
+                      {exercise.relationship.toTable}[
+                      {exercise.relationship.toColumn}]
+                    </strong>
+                  </div>
+                  <p>
+                    Single-direction filtering:{' '}
+                    <strong>{exercise.relationship.filterDirection}</strong>
+                  </p>
+                </div>
+              </section>
+            )}
+          </section>
+
+          <section className="learning-loop" aria-label="Current learning flow">
+            {!latestAttempt && support && agentSupportEvent && (
+              <DaxDeliveredAssistance event={agentSupportEvent} />
+            )}
+
+            {!latestAttempt && predictionStage}
+
+            {latestAttempt && (
+              <DaxEvaluationEvent attempt={latestAttempt} exercise={exercise} />
+            )}
+
+            {latestAttempt?.result === 'incorrect' &&
+              supportMatchesLatestAttempt &&
+              agentSupportEvent && (
+                <DaxDeliveredAssistance event={agentSupportEvent} />
+              )}
+
+            {latestAttempt?.result === 'incorrect' && !supportMatchesLatestAttempt && (
+              <p className="agent-capability-hint">
+                <span aria-hidden="true">✦</span>
+                <strong>AI Agent · WebMCP</strong>
+                The evaluated attempt is now observable. A compatible agent may
+                choose bounded assistance; your retry remains the learning action.
+              </p>
+            )}
+
+            {latestAttempt?.result === 'incorrect' && predictionStage}
+
+            {exerciseComplete && latestAttempt?.result === 'correct' && (
+              <DaxSolvedTransformation exercise={exercise} />
+            )}
+
+            {exerciseComplete &&
+              support?.learnerState === 'solved' &&
+              agentSupportEvent && (
+                <DaxDeliveredAssistance event={agentSupportEvent} />
+              )}
+
+            {exerciseComplete && currentExerciseIndex < daxExercises.length - 1 && (
+              <button
+                type="button"
+                className="next-exercise"
+                onClick={advanceToNextExercise}
+              >
+                Continue to exercise {currentExerciseIndex + 2}
+                <span aria-hidden="true">→</span>
+              </button>
+            )}
+
+            {missionComplete && (
+              <section className="mastery-complete" aria-labelledby="mastery-title">
+                <p className="eyebrow">Mission complete</p>
+                <h2 id="mastery-title">Mastery demonstrated</h2>
+                <p>
+                  All eight required skills and the DAX-12 transfer were
+                  demonstrated through evaluated learner attempts.
+                </p>
+              </section>
+            )}
+          </section>
         </section>
 
-        <FlowConnector />
-
-        {support?.learnerState === 'not_attempted' && agentSupportEvent ? (
-          <>
-            <DaxAgentEvent event={agentSupportEvent} />
-            <FlowConnector />
-            {predictionStage}
-          </>
-        ) : supportFollowsIncorrectAttempt && agentSupportEvent ? (
-          <>
-            <DaxAttemptEvent attempt={observedSupportAttempt} />
-            <FlowConnector />
-            <DaxEvaluationEvent
-              attempt={observedSupportAttempt}
-              exercise={exercise}
-            />
-            <FlowConnector />
-            <DaxAgentEvent event={agentSupportEvent} />
-
-            {latestAttemptFollowsSupport && latestAttempt && (
-              <>
-                <FlowConnector />
-                <DaxAttemptEvent attempt={latestAttempt} retry />
-                <FlowConnector />
-                <DaxEvaluationEvent attempt={latestAttempt} exercise={exercise} />
-              </>
-            )}
-
-            {latestAttempt?.result === 'incorrect' && (
-              <>
-                <FlowConnector />
-                {predictionStage}
-              </>
-            )}
-          </>
-        ) : latestAttempt ? (
-          <>
-            <DaxAttemptEvent attempt={latestAttempt} />
-            <FlowConnector />
-            <DaxEvaluationEvent attempt={latestAttempt} exercise={exercise} />
-            {latestAttempt.result === 'incorrect' && (
-              <>
-                {!agentSupportEvent && (
-                  <p className="agent-capability-hint">
-                    <span aria-hidden="true">✦</span>
-                    <strong>AI Agent · WebMCP</strong>
-                    A compatible external agent can observe this evaluated state
-                    and choose a bounded intervention when useful.
-                  </p>
-                )}
-                <FlowConnector />
-                {predictionStage}
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            {predictionStage}
-            <p className="agent-capability-hint">
-              <span aria-hidden="true">✦</span>
-              <strong>AI Agent · WebMCP</strong>
-              A compatible external agent can observe this live state and choose
-              an intervention when useful.
-            </p>
-          </>
-        )}
-
-        {exerciseComplete && latestAttempt?.result === 'correct' && (
-          <>
-            <FlowConnector />
-            <DaxSolvedTransformation exercise={exercise} />
-          </>
-        )}
-
-        {support?.learnerState === 'solved' && agentSupportEvent && (
-          <>
-            <FlowConnector />
-            <DaxAgentEvent event={agentSupportEvent} />
-          </>
-        )}
-
-        {exerciseComplete && currentExerciseIndex < daxExercises.length - 1 && (
-          <button
-            type="button"
-            className="next-exercise"
-            onClick={advanceToNextExercise}
-          >
-            Continue to exercise {currentExerciseIndex + 2}
-            <span aria-hidden="true">→</span>
-          </button>
-        )}
-
-        {missionComplete && (
-          <section className="mastery-complete" aria-labelledby="mastery-title">
-            <p className="eyebrow">Mission complete</p>
-            <h2 id="mastery-title">Mastery demonstrated</h2>
-            <p>
-              All eight required skills and the DAX-12 transfer were
-              demonstrated through evaluated learner attempts.
-            </p>
-            <ul aria-label="Mastery evidence summary">
-              {requiredDaxSkills.map((skill) => (
-                <li key={skill.id}>
-                  <span>✓</span>
-                  <p><strong>{skill.id}</strong>{skill.name}</p>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        <DaxAgentRail
+          exercise={exercise}
+          latestAttempt={latestAttempt}
+          supportEvent={agentSupportEvent}
+          attempts={attempts}
+          demonstratedSkillCount={demonstratedSkillIds.size}
+          transferDemonstrated={transferDemonstrated}
+          missionMastered={missionMastered}
+          missionComplete={missionComplete}
+        />
       </section>
 
       <section className="secondary-information" aria-label="Mission details">
@@ -904,7 +1037,10 @@ function App() {
                       className={demonstrated ? 'demonstrated' : ''}
                     >
                       <span>{demonstrated ? '✓' : skill.id}</span>
-                      <p><strong>{skill.id}</strong>{skill.name}</p>
+                      <p>
+                        <strong>{skill.id}</strong>
+                        {skill.name}
+                      </p>
                       <small>{demonstrated ? 'Demonstrated' : 'Not yet'}</small>
                     </li>
                   )
@@ -915,47 +1051,50 @@ function App() {
         </details>
 
         {attempts.length > 0 && (
-          <section className="attempt-history" aria-labelledby="attempt-history-title">
-            <div className="history-heading">
-              <div>
-                <p className="eyebrow">Secondary record</p>
-                <h2 id="attempt-history-title">Attempt history</h2>
-              </div>
-              <span>{attempts.length}</span>
-            </div>
-            <ol>
-              {attempts.map((attempt) => {
-                const attemptExercise = daxExercises.find(
-                  ({ id }) => id === attempt.exerciseId,
-                )
-                const possibleMisconception = attemptExercise
-                  ? identifyDaxMisconception(
-                      attemptExercise,
-                      attempt.submittedAnswer,
-                      attempt.result,
-                    )
-                  : null
+          <details className="attempt-history-details">
+            <summary>
+              <span>Attempt history</span>
+              <small>{attempts.length} recorded</small>
+            </summary>
+            <section
+              className="attempt-history"
+              aria-labelledby="attempt-history-title"
+            >
+              <h2 className="sr-only" id="attempt-history-title">Attempt history</h2>
+              <ol>
+                {attempts.map((attempt) => {
+                  const attemptExercise = daxExercises.find(
+                    ({ id }) => id === attempt.exerciseId,
+                  )
+                  const possibleMisconception = attemptExercise
+                    ? identifyDaxMisconception(
+                        attemptExercise,
+                        attempt.submittedAnswer,
+                        attempt.result,
+                      )
+                    : null
 
-                return (
-                  <li key={attempt.id}>
-                    <span>
-                      Attempt #{attempt.sequenceNumber}
-                      <small>{attempt.exerciseId}</small>
-                      {possibleMisconception && (
-                        <small className="attempt-misconception">
-                          {possibleMisconception.id} · Possible misconception
-                        </small>
-                      )}
-                    </span>
-                    <strong>{attempt.submittedAnswer}</strong>
-                    <span className={`attempt-result ${attempt.result}`}>
-                      {attempt.result === 'correct' ? 'Correct' : 'Incorrect'}
-                    </span>
-                  </li>
-                )
-              })}
-            </ol>
-          </section>
+                  return (
+                    <li key={attempt.id}>
+                      <span>
+                        Attempt #{attempt.sequenceNumber}
+                        <small>{attempt.exerciseId}</small>
+                        {possibleMisconception && (
+                          <small className="attempt-misconception">
+                            {possibleMisconception.id} · Possible misconception
+                          </small>
+                        )}
+                      </span>
+                      <strong>{attempt.submittedAnswer}</strong>
+                      <span className={`attempt-result ${attempt.result}`}>
+                        {attempt.result === 'correct' ? 'Correct' : 'Incorrect'}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ol>
+            </section>
+          </details>
         )}
       </section>
 

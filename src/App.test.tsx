@@ -50,35 +50,42 @@ afterEach(cleanup)
 beforeEach(() => localStorage.clear())
 
 describe('DAX learner attempt flow', () => {
-  it('opens with mission purpose, live actors, context, and learner action before global detail', () => {
+  it('opens as a 70/30 live learning workspace with a primary learner action and passive agent path', () => {
     render(<App />)
 
-    expect(
-      screen.getByText(
-        'Predict how CALCULATE changes the context around a measure.',
-      ),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/Only evaluated learner attempts create evidence/),
-    ).toBeInTheDocument()
-
-    const actors = screen.getByRole('region', {
-      name: 'Live learning actors',
-    })
-    expect(actors).toHaveTextContent('LearnerPrediction required')
-    expect(actors).toHaveTextContent('Learning WorldAwaiting learner attempt')
-    expect(actors).toHaveTextContent(
-      'AI Agent · WebMCPWaiting for a WebMCP request',
+    expect(screen.getByText('Learning World')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Course breadcrumb' })).toHaveTextContent(
+      'Power BI›DAX›CALCULATE',
     )
+    expect(
+      screen.getByText('Adaptive assistance. Fixed evidence standard.'),
+    ).toBeInTheDocument()
 
+    const workspace = screen.getByRole('region', {
+      name: 'Live learning workspace',
+    })
+    const learnerWorkspace = screen.getByRole('region', {
+      name: 'Learning workspace',
+    })
+    const agentRail = screen.getByRole('complementary', {
+      name: 'AI Agent live path',
+    })
     const world = screen.getByRole('region', { name: 'Current DAX world' })
     const prediction = screen.getByRole('region', {
       name: 'Commit to a result',
     })
     const globalDetail = screen.getByText('View mission progress')
+    expect(workspace).toContainElement(learnerWorkspace)
+    expect(workspace).toContainElement(agentRail)
     expect(isBefore(world, prediction)).toBe(true)
     expect(isBefore(prediction, globalDetail)).toBe(true)
     expect(screen.getByRole('button', { name: 'Submit prediction' })).toBeVisible()
+    expect(agentRail).toHaveTextContent('Observe● ActiveWaiting for learner attempt')
+    expect(agentRail).toHaveTextContent('Context signal○ Waiting')
+    expect(agentRail).toHaveTextContent('Select intervention○ Waiting')
+    expect(agentRail).toHaveTextContent('Assist○ Waiting')
+    expect(agentRail).toHaveTextContent('Current stateLearner action required')
+    expect(agentRail).toHaveTextContent('Agent assistance ≠ learning evidence')
 
     expect(
       screen.queryByRole('region', { name: 'AI Agent intervention' }),
@@ -97,23 +104,25 @@ describe('DAX learner attempt flow', () => {
     expect(screen.queryByText('450')).not.toBeInTheDocument()
   })
 
-  it('places a mapped incorrect evaluation directly after the learner attempt', async () => {
+  it('places compact mapped attempt provenance inside Learning World evaluation', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     await user.type(screen.getByLabelText('Your numeric answer'), '250')
     await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
 
-    const learnerAttempt = screen.getByRole('region', { name: 'Learner attempt' })
     const evaluation = screen.getByRole('region', {
       name: 'Learning World evaluation',
     })
     const retry = screen.getByRole('region', {
       name: 'Demonstrate the reasoning again',
     })
-    expect(learnerAttempt).toHaveTextContent('250Attempt #1DAX-01')
-    expect(evaluation).toHaveTextContent('250Incorrect')
-    expect(isBefore(learnerAttempt, evaluation)).toBe(true)
+    expect(evaluation).toHaveTextContent(
+      'Attempt #1 · deterministic evaluationLearner answer250Incorrect',
+    )
+    expect(
+      screen.queryByRole('region', { name: 'Learner attempt' }),
+    ).not.toBeInTheDocument()
     expect(isBefore(evaluation, retry)).toBe(true)
 
     const possibleMisconception = within(evaluation).getByRole('note', {
@@ -124,7 +133,16 @@ describe('DAX learner attempt flow', () => {
       'Assumes the targeted filter remains unchanged',
     )
     expect(possibleMisconception).toHaveTextContent(
-      'This is a reasoning signal, not a diagnosis.',
+      'Compatible pattern · not a diagnosis',
+    )
+    const agentRail = screen.getByRole('complementary', {
+      name: 'AI Agent live path',
+    })
+    expect(agentRail).toHaveTextContent('Attempt #1 · 250 · incorrect')
+    expect(agentRail).toHaveTextContent('Possible M03')
+    expect(agentRail).toHaveTextContent('Waiting for AI agent')
+    expect(agentRail).toHaveTextContent(
+      'Live learner state is available through WebMCP.',
     )
     expect(
       screen.queryByRole('region', { name: 'AI Agent intervention' }),
@@ -153,7 +171,54 @@ describe('DAX learner attempt flow', () => {
     expect(screen.queryByText(/^Why 450\?$/)).not.toBeInTheDocument()
   })
 
-  it('records the retry, establishes evidence, and immediately reveals a vertical explanation', async () => {
+  it('shows the complete DAX-03 wrong path across the learner workspace and live agent rail', async () => {
+    const user = userEvent.setup()
+    const priorAttempts: DaxAttempt[] = [
+      {
+        id: 'DAX-01-attempt-1',
+        exerciseId: 'DAX-01',
+        submittedAnswer: 450,
+        result: 'correct',
+        sequenceNumber: 1,
+      },
+      {
+        id: 'DAX-02-attempt-2',
+        exerciseId: 'DAX-02',
+        submittedAnswer: 300,
+        result: 'correct',
+        sequenceNumber: 2,
+      },
+    ]
+    persistDaxMissionState(priorAttempts, 'DAX-03')
+    render(<App />)
+
+    await user.type(screen.getByLabelText('Your numeric answer'), '500')
+    await user.click(screen.getByRole('button', { name: 'Submit prediction' }))
+
+    const evaluation = screen.getByRole('region', {
+      name: 'Learning World evaluation',
+    })
+    const retry = screen.getByRole('region', {
+      name: 'Demonstrate the reasoning again',
+    })
+    const rail = screen.getByRole('complementary', {
+      name: 'AI Agent live path',
+    })
+    expect(evaluation).toHaveTextContent('500Incorrect')
+    expect(evaluation).toHaveTextContent('Possible misconception · M02')
+    expect(isBefore(evaluation, retry)).toBe(true)
+    expect(rail).toHaveTextContent('Attempt #3 · 500 · incorrect')
+    expect(rail).toHaveTextContent('Possible M02')
+    expect(rail).toHaveTextContent('Select intervention● Active')
+    expect(rail).toHaveTextContent('Waiting for AI agent')
+    expect(rail).toHaveTextContent('Assist○ Waiting')
+    expect(rail).toHaveTextContent(
+      'Current stateWaiting for AI agent intervention',
+    )
+    expect(screen.queryByText(/^Why 300\?$/)).not.toBeInTheDocument()
+  })
+
+  it('records the retry, establishes evidence, and immediately reveals a compact five-stage explanation', async () => {
     const user = userEvent.setup()
     render(<App />)
 
@@ -165,16 +230,26 @@ describe('DAX learner attempt flow', () => {
     expect(attempts).toHaveLength(2)
     expect(attempts[1]).toHaveTextContent('Attempt #2DAX-01450Correct')
 
-    const learnerAttempt = screen.getByRole('region', { name: 'Learner attempt' })
     const evaluation = screen.getByRole('region', {
       name: 'Learning World evaluation',
     })
     const explanation = screen.getByRole('region', { name: 'Why 450?' })
-    expect(learnerAttempt).toHaveTextContent('450')
-    expect(evaluation).toHaveTextContent('450Correct')
-    expect(evaluation).toHaveTextContent('Evidence recordedS1 · S2')
-    expect(isBefore(learnerAttempt, evaluation)).toBe(true)
+    expect(evaluation).toHaveTextContent(
+      'Attempt #2 · deterministic evaluationLearner answer450Correct',
+    )
+    expect(evaluation).toHaveTextContent('Evidence establishedS1 · S2')
+    expect(
+      screen.queryByRole('region', { name: 'Learner attempt' }),
+    ).not.toBeInTheDocument()
     expect(isBefore(evaluation, explanation)).toBe(true)
+    const agentRail = screen.getByRole('complementary', {
+      name: 'AI Agent live path',
+    })
+    expect(agentRail).toHaveTextContent('Select intervention— Not required')
+    expect(agentRail).toHaveTextContent('Assist— Not required')
+    expect(agentRail).toHaveTextContent(
+      'Evidence established from learner Attempt #2',
+    )
 
     const orderedStages = [
       'Before CALCULATE',
@@ -225,7 +300,7 @@ describe('DAX learner attempt flow', () => {
       screen.queryByRole('button', { name: 'Continue to exercise 2' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByText('DAX-01', { selector: '.exercise-id strong' }),
+      screen.getByText('DAX-01', { selector: '.exercise-id span' }),
     ).toBeInTheDocument()
   })
 
@@ -236,7 +311,7 @@ describe('DAX learner attempt flow', () => {
     await solveCurrentExercise(user, 450, 2)
 
     expect(
-      screen.getByText('DAX-02', { selector: '.exercise-id strong' }),
+      screen.getByText('DAX-02', { selector: '.exercise-id span' }),
     ).toBeInTheDocument()
     const history = screen.getByRole('region', { name: 'Attempt history' })
     expect(within(history).getByRole('listitem')).toHaveTextContent('DAX-01')
@@ -256,7 +331,7 @@ describe('DAX learner attempt flow', () => {
     render(<App />)
 
     expect(
-      screen.getByText('DAX-02', { selector: '.exercise-id strong' }),
+      screen.getByText('DAX-02', { selector: '.exercise-id span' }),
     ).toBeInTheDocument()
     expect(screen.getByText('1/12 exercises · 2/8 skills')).toBeInTheDocument()
     expect(
@@ -307,7 +382,7 @@ describe('DAX learner attempt flow', () => {
     )
 
     expect(
-      screen.getByText('DAX-01', { selector: '.exercise-id strong' }),
+      screen.getByText('DAX-01', { selector: '.exercise-id span' }),
     ).toBeInTheDocument()
     expect(screen.getByText('0/12 exercises · 0/8 skills')).toBeInTheDocument()
     expect(
@@ -330,7 +405,7 @@ describe('DAX learner attempt flow', () => {
     }
 
     expect(
-      screen.getByText('DAX-10', { selector: '.exercise-id strong' }),
+      screen.getByText('DAX-10', { selector: '.exercise-id span' }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('table', { name: 'Customers data for DAX-10' }),
