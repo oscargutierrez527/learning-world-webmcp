@@ -29,10 +29,22 @@ function WebMcpHarness({ snapshot }: { snapshot: DaxWebMcpSnapshot }) {
   return null
 }
 
-beforeEach(() => localStorage.clear())
+function pendingCoachFetch(_input: RequestInfo | URL, init?: RequestInit) {
+  return new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () =>
+      reject(new DOMException('Aborted', 'AbortError')),
+    )
+  })
+}
+
+beforeEach(() => {
+  localStorage.clear()
+  vi.stubGlobal('fetch', vi.fn(pendingCoachFetch))
+})
 
 afterEach(() => {
   cleanup()
+  vi.unstubAllGlobals()
   setDocumentModelContext(undefined)
   setNavigatorModelContext(undefined)
 })
@@ -155,7 +167,7 @@ describe('useDaxWebMcp', () => {
       screen.queryByRole('region', { name: 'AI Agent intervention' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByText(/A compatible external agent can observe this world/),
+      screen.getByText(/embedded coach and compatible external agents/),
     ).toBeInTheDocument()
 
     const socraticTool = registeredTools.find(
@@ -204,7 +216,7 @@ describe('useDaxWebMcp', () => {
     expect(agentRail).toHaveTextContent('ALL(Sales[Region])')
     expect(supportRegion).toHaveTextContent('via WebMCP')
     expect(supportRegion).toHaveTextContent(
-      'Assistance delivered · learning evidence unchanged',
+      'Assistance does not create evidence.',
     )
     expect(supportRegion).toHaveTextContent('ALL(Sales[Region])')
     await expect(
@@ -359,7 +371,7 @@ describe('useDaxWebMcp', () => {
       'Socratic assistance delivered · learner retry required',
     )
     expect(agentEvent).toHaveTextContent(
-      'Assistance delivered · learning evidence unchanged',
+      'Assistance does not create evidence.',
     )
 
     await expect(
@@ -487,7 +499,7 @@ describe('useDaxWebMcp', () => {
       screen.queryByRole('region', { name: 'AI Agent intervention' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByText(/A compatible external agent can observe this world/),
+      screen.getByText(/embedded coach and compatible external agents/),
     ).toBeInTheDocument()
   })
 
@@ -522,7 +534,7 @@ describe('useDaxWebMcp', () => {
       screen.queryByRole('region', { name: 'AI Agent intervention' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByText(/A compatible external agent can observe this world/),
+      screen.getByText(/embedded coach and compatible external agents/),
     ).toBeInTheDocument()
   })
 })

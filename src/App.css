@@ -1110,6 +1110,16 @@ button {
   );
 }
 
+.agent-stage.unavailable:not(:last-child)::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    #5f4248 0,
+    #5f4248 3px,
+    transparent 3px,
+    transparent 7px
+  );
+}
+
 .agent-stage-marker {
   position: relative;
   z-index: 1;
@@ -1150,6 +1160,12 @@ button {
 .agent-stage.not-required .agent-stage-marker span {
   border-style: dashed;
   color: #88808f;
+}
+
+.agent-stage.unavailable .agent-stage-marker span {
+  border-color: #79525c;
+  border-style: dashed;
+  color: #c28f9b;
 }
 
 .agent-stage-body {
@@ -1201,8 +1217,13 @@ button {
 }
 
 .agent-stage.waiting .agent-stage-heading span,
-.agent-stage.not-required .agent-stage-heading span {
+.agent-stage.not-required .agent-stage-heading span,
+.agent-stage.unavailable .agent-stage-heading span {
   color: #81798b;
+}
+
+.agent-stage.unavailable .agent-stage-heading span {
+  color: #c28f9b;
 }
 
 .agent-stage-body > p,
@@ -1239,22 +1260,35 @@ button {
   font-size: 0.56rem;
 }
 
-.agent-waiting-callout {
+.agent-waiting-callout,
+.agent-restored-callout,
+.agent-invoking-callout,
+.agent-unavailable-callout {
   display: grid;
   gap: 2px;
   margin-top: 7px;
 }
 
-.agent-waiting-callout strong {
+.agent-waiting-callout strong,
+.agent-restored-callout strong,
+.agent-invoking-callout strong,
+.agent-unavailable-callout strong {
   color: #e1d4f8;
   font-size: 0.68rem;
   letter-spacing: 0.02em;
 }
 
-.agent-waiting-callout small {
+.agent-waiting-callout small,
+.agent-restored-callout small,
+.agent-invoking-callout small,
+.agent-unavailable-callout small {
   color: #a99abb;
   font-size: 0.58rem;
   line-height: 1.35;
+}
+
+.agent-unavailable-callout strong {
+  color: #d7a6b1;
 }
 
 .agent-rail .support-modes {
@@ -1309,6 +1343,16 @@ button {
   font-size: 0.61rem;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
+}
+
+.rail-via-webmcp {
+  display: block;
+  margin-top: 2px;
+  color: #9f8abc;
+  font-size: 0.55rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .rail-assistance .filter-trace-content {

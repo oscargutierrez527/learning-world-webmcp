@@ -10,7 +10,7 @@ import {
   within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { daxExercises } from './dax/exercise'
 import {
@@ -46,8 +46,22 @@ function isBefore(first: HTMLElement, second: HTMLElement) {
   )
 }
 
-afterEach(cleanup)
-beforeEach(() => localStorage.clear())
+function pendingCoachFetch(_input: RequestInfo | URL, init?: RequestInit) {
+  return new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () =>
+      reject(new DOMException('Aborted', 'AbortError')),
+    )
+  })
+}
+
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
+beforeEach(() => {
+  localStorage.clear()
+  vi.stubGlobal('fetch', vi.fn(pendingCoachFetch))
+})
 
 describe('DAX learner attempt flow', () => {
   it('opens as a 70/30 live learning workspace with a primary learner action and passive agent path', () => {
@@ -140,10 +154,8 @@ describe('DAX learner attempt flow', () => {
     })
     expect(agentRail).toHaveTextContent('Attempt #1 · 250 · incorrect')
     expect(agentRail).toHaveTextContent('Possible M03')
-    expect(agentRail).toHaveTextContent('Waiting for AI agent')
-    expect(agentRail).toHaveTextContent(
-      'Live learner state is available through WebMCP.',
-    )
+    expect(agentRail).toHaveTextContent('Active Learning Coach')
+    expect(agentRail).toHaveTextContent('Selecting bounded assistance...')
     expect(
       screen.queryByRole('region', { name: 'AI Agent intervention' }),
     ).not.toBeInTheDocument()
@@ -210,10 +222,11 @@ describe('DAX learner attempt flow', () => {
     expect(rail).toHaveTextContent('Attempt #3 · 500 · incorrect')
     expect(rail).toHaveTextContent('Possible M02')
     expect(rail).toHaveTextContent('Select intervention● Active')
-    expect(rail).toHaveTextContent('Waiting for AI agent')
+    expect(rail).toHaveTextContent('Active Learning Coach')
+    expect(rail).toHaveTextContent('Selecting bounded assistance...')
     expect(rail).toHaveTextContent('Assist○ Waiting')
     expect(rail).toHaveTextContent(
-      'Current stateWaiting for AI agent intervention',
+      'Current stateActive Learning Coach selecting bounded assistance',
     )
     expect(screen.queryByText(/^Why 300\?$/)).not.toBeInTheDocument()
   })

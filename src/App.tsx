@@ -1,5 +1,13 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import './App.css'
+import {
+  buildDaxCoachSnapshot,
+  DAX_ACTIVE_COACH_TIMEOUT_MS,
+  executeDaxCoachWebMcp,
+  requestDaxCoachSelection,
+  type DaxCoachInteraction,
+} from './dax/activeCoach'
+import type { DaxCoachIntervention } from './dax/activeCoachContract'
 import { evaluateDaxPrediction } from './dax/evaluation'
 import { daxExercises } from './dax/exercise'
 import {
@@ -20,6 +28,7 @@ import type {
   DaxDataColumn,
   DaxDataRow,
   DaxExercise,
+  DaxSkillId,
   DaxSupportMode,
 } from './dax/types'
 import { useDaxWebMcp } from './dax/useDaxWebMcp'
@@ -34,15 +43,22 @@ interface DaxDatasetTableProps {
 interface DaxAgentSupportEvent {
   support: DaxAgentSupport
   observedAttempt: DaxAttempt | null
+  requestedBy: 'active_coach' | 'external_agent'
 }
 
-type AgentStageState = 'completed' | 'active' | 'waiting' | 'not-required'
+type AgentStageState =
+  | 'completed'
+  | 'active'
+  | 'waiting'
+  | 'not-required'
+  | 'unavailable'
 
 const agentStageLabels: Record<AgentStageState, string> = {
   completed: '✓ Completed',
   active: '● Active',
   waiting: '○ Waiting',
   'not-required': '— Not required',
+  unavailable: '— Unavailable',
 }
 
 const supportLabels: Record<DaxSupportMode, string> = {
@@ -305,6 +321,11 @@ function DaxSupportContent({ support }: { support: DaxAgentSupport }) {
 }
 
 function DaxDeliveredAssistance({ event }: { event: DaxAgentSupportEvent }) {
+  const actor =
+    event.requestedBy === 'active_coach'
+      ? 'Active Learning Coach'
+      : 'AI Agent'
+
   return (
     <section
       className="loop-event delivered-assistance"
@@ -316,14 +337,14 @@ function DaxDeliveredAssistance({ event }: { event: DaxAgentSupportEvent }) {
           ✦
         </span>
         <p>
-          <strong>AI Agent · via WebMCP</strong>
+          <strong>{actor} · via WebMCP</strong>
           <small>Selected intervention · {supportLabels[event.support.type]}</small>
         </p>
       </div>
       <div className="delivered-support-body">
         <DaxSupportContent support={event.support} />
         <p className="support-authority">
-          Assistance delivered · learning evidence unchanged
+          Assistance does not create evidence.
         </p>
       </div>
     </section>
@@ -364,6 +385,7 @@ function DaxAgentRail({
   exercise,
   latestAttempt,
   supportEvent,
+  coachInteraction,
   attempts,
   demonstratedSkillCount,
   transferDemonstrated,
@@ -373,6 +395,7 @@ function DaxAgentRail({
   exercise: DaxExercise
   latestAttempt: DaxAttempt | undefined
   supportEvent: DaxAgentSupportEvent | null
+  coachInteraction: DaxCoachInteraction | null
   attempts: DaxAttempt[]
   demonstratedSkillCount: number
   transferDemonstrated: boolean
@@ -387,6 +410,17 @@ function DaxAgentRail({
         latestAttempt.result,
       )
     : null
+  const coachMatchesLatestAttempt = Boolean(
+    latestAttempt && coachInteraction?.attemptId === latestAttempt.id,
+  )
+  const currentCoachInteraction = coachMatchesLatestAttempt
+    ? coachInteraction
+    : null
+  const selectedMode =
+    support?.type ?? currentCoachInteraction?.selectedIntervention ?? null
+  const selectedByActiveCoach =
+    supportEvent?.requestedBy === 'active_coach' ||
+    Boolean(currentCoachInteraction?.selectedIntervention)
   const observeState: AgentStageState =
     latestAttempt || support ? 'completed' : 'active'
   const contextState: AgentStageState = latestAttempt
@@ -394,18 +428,33 @@ function DaxAgentRail({
     : support
       ? 'completed'
       : 'waiting'
-  const selectionState: AgentStageState = support
-    ? 'completed'
-    : latestAttempt?.result === 'incorrect'
-      ? 'active'
-      : latestAttempt?.result === 'correct'
-        ? 'not-required'
-        : 'waiting'
-  const assistState: AgentStageState = support
-    ? 'completed'
-    : latestAttempt?.result === 'correct'
-      ? 'not-required'
-      : 'waiting'
+  const selectionState: AgentStageState =
+    latestAttempt?.result === 'correct'
+      ? support
+        ? 'completed'
+        : 'not-required'
+      : support
+        ? 'completed'
+        : currentCoachInteraction?.status === 'selecting'
+          ? 'active'
+          : currentCoachInteraction?.status === 'coach_unavailable'
+            ? 'unavailable'
+            : currentCoachInteraction?.selectedIntervention
+              ? 'completed'
+              : 'waiting'
+  const assistState: AgentStageState =
+    latestAttempt?.result === 'correct'
+      ? support
+        ? 'completed'
+        : 'not-required'
+      : support
+        ? 'completed'
+        : currentCoachInteraction?.status === 'invoking'
+          ? 'active'
+          : currentCoachInteraction?.status === 'webmcp_unavailable' ||
+              currentCoachInteraction?.status === 'coach_unavailable'
+            ? 'unavailable'
+            : 'waiting'
   const supportObservedDifferentAttempt = Boolean(
     supportEvent?.observedAttempt &&
       latestAttempt &&
@@ -417,10 +466,18 @@ function DaxAgentRail({
       ? `Evidence established from learner Attempt #${latestAttempt.sequenceNumber} · next exercise available`
       : support && latestAttempt?.result === 'incorrect'
         ? `${supportLabels[support.type]} assistance delivered · learner retry required`
+        : currentCoachInteraction?.status === 'selecting'
+          ? 'Active Learning Coach selecting bounded assistance'
+          : currentCoachInteraction?.status === 'invoking' && selectedMode
+            ? `Invoking ${supportLabels[selectedMode]} through WebMCP`
+            : currentCoachInteraction?.status === 'webmcp_unavailable' && selectedMode
+              ? `${supportLabels[selectedMode]} selected · WebMCP unavailable in this browser`
+              : currentCoachInteraction?.status === 'coach_unavailable'
+                ? 'Coach unavailable · learner can continue and retry'
         : support
           ? `${supportLabels[support.type]} assistance delivered · learner prediction required`
         : latestAttempt?.result === 'incorrect'
-          ? 'Waiting for AI agent intervention'
+          ? 'Restored attempt ready · coach runs after the next learner retry'
           : 'Learner action required'
 
   return (
@@ -431,7 +488,7 @@ function DaxAgentRail({
             ✦
           </span>
           <div>
-            <p>AI Agent · WebMCP</p>
+            <p>Active Learning Coach · WebMCP</p>
             <h2>Live assistance path</h2>
           </div>
         </div>
@@ -439,8 +496,8 @@ function DaxAgentRail({
       </header>
 
       <p className="agent-rail-intro">
-        A compatible external agent can observe this world and choose a bounded
-        support capability. The learner does not choose the mode.
+        The embedded coach and compatible external agents use the same bounded
+        WebMCP capabilities. The learner does not choose the mode.
       </p>
 
       <ol className="agent-trace" aria-label="Observable agent path">
@@ -494,17 +551,28 @@ function DaxAgentRail({
         >
           {selectionState === 'not-required' ? (
             <p>Learner demonstrated the result without assistance.</p>
+          ) : selectionState === 'unavailable' ? (
+            <div className="agent-unavailable-callout">
+              <strong>Coach unavailable</strong>
+              <small>Learner can continue and retry.</small>
+            </div>
           ) : (
             <>
               {selectionState === 'active' && (
                 <div className="agent-waiting-callout">
-                  <strong>Waiting for AI agent</strong>
-                  <small>Live learner state is available through WebMCP.</small>
+                  <strong>Active Learning Coach</strong>
+                  <small>Selecting bounded assistance...</small>
+                </div>
+              )}
+              {selectionState === 'waiting' && latestAttempt?.result === 'incorrect' && (
+                <div className="agent-restored-callout">
+                  <strong>Restored learner attempt</strong>
+                  <small>Automatic coaching runs only for a new submission.</small>
                 </div>
               )}
               <ul className="support-modes" aria-label="Agent assistance capabilities">
                 {supportModes.map((mode) => {
-                  const selected = support?.type === mode
+                  const selected = selectedMode === mode
                   return (
                     <li key={mode} className={selected ? 'selected' : ''}>
                       <span aria-hidden="true">{selected ? '●' : '○'}</span>
@@ -513,9 +581,11 @@ function DaxAgentRail({
                   )
                 })}
               </ul>
-              {support && (
+              {selectedMode && (
                 <p className="selection-attribution">
-                  Selected by AI Agent · via WebMCP
+                  {selectedByActiveCoach
+                    ? 'Selected by Active Learning Coach'
+                    : 'Selected by AI Agent · via WebMCP'}
                 </p>
               )}
             </>
@@ -531,17 +601,36 @@ function DaxAgentRail({
                   supportEvent?.observedAttempt &&
                   ` · delivered for Attempt #${supportEvent.observedAttempt.sequenceNumber}`}
               </p>
+              <small className="rail-via-webmcp">Via WebMCP</small>
               <DaxSupportContent support={support} />
             </div>
           ) : assistState === 'not-required' ? (
             <p>Exercise solved before any intervention was invoked.</p>
+          ) : assistState === 'active' ? (
+            <div className="agent-invoking-callout">
+              <strong>Invoking selected WebMCP capability...</strong>
+              {selectedMode && <small>{supportLabels[selectedMode]}</small>}
+            </div>
+          ) : assistState === 'unavailable' ? (
+            <div className="agent-unavailable-callout">
+              <strong>
+                {currentCoachInteraction?.status === 'webmcp_unavailable'
+                  ? 'WebMCP execution unavailable in this browser'
+                  : 'No assistance was delivered'}
+              </strong>
+              <small>Learner can continue and retry.</small>
+            </div>
           ) : (
             <p>Waiting for an agent capability invocation</p>
           )}
         </AgentTraceStage>
       </ol>
 
-      <section className="rail-current-state" aria-label="Current agent state">
+      <section
+        className="rail-current-state"
+        aria-label="Current agent state"
+        aria-live="polite"
+      >
         <span>Current state</span>
         <strong>{currentState}</strong>
       </section>
@@ -599,9 +688,37 @@ function App() {
   )
   const [agentSupportEvent, setAgentSupportEvent] =
     useState<DaxAgentSupportEvent | null>(null)
+  const [coachInteraction, setCoachInteraction] =
+    useState<DaxCoachInteraction | null>(null)
   const [validationError, setValidationError] = useState('')
   const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const attemptsRef = useRef(restoredMissionState.attempts)
+  const currentExerciseIndexRef = useRef(
+    restoredMissionState.currentExerciseIndex,
+  )
+  const processedCoachAttemptIdsRef = useRef(new Set<string>())
+  const priorCoachInterventionsRef = useRef(
+    new Map<string, DaxCoachIntervention[]>(),
+  )
+  const activeCoachControllerRef = useRef<AbortController | null>(null)
+  const activeCoachAttemptIdRef = useRef<string | null>(null)
+  const coachToolAttemptIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    attemptsRef.current = attempts
+  }, [attempts])
+
+  useEffect(() => {
+    currentExerciseIndexRef.current = currentExerciseIndex
+  }, [currentExerciseIndex])
+
+  useEffect(
+    () => () => {
+      activeCoachControllerRef.current?.abort()
+    },
+    [],
+  )
 
   useEffect(() => {
     if (attempts.length === 0 && currentExerciseIndex === 0) {
@@ -635,11 +752,140 @@ function App() {
     missionMastered && solvedExerciseIds.size === daxExercises.length
 
   useDaxWebMcp({ currentExerciseIndex, attempts }, (support) => {
+    const activeExercise = daxExercises[currentExerciseIndexRef.current]
+    const coachAttemptId = coachToolAttemptIdRef.current
+    const observedAttempt = coachAttemptId
+      ? attemptsRef.current.find(({ id }) => id === coachAttemptId) ?? null
+      : attemptsRef.current
+          .filter(({ exerciseId }) => exerciseId === activeExercise.id)
+          .at(-1) ?? null
     setAgentSupportEvent({
       support,
-      observedAttempt: currentExerciseAttempts.at(-1) ?? null,
+      observedAttempt,
+      requestedBy: coachAttemptId ? 'active_coach' : 'external_agent',
     })
   })
+
+  function cancelActiveCoachRun() {
+    activeCoachControllerRef.current?.abort()
+    activeCoachControllerRef.current = null
+    activeCoachAttemptIdRef.current = null
+    coachToolAttemptIdRef.current = null
+  }
+
+  async function startActiveCoach(
+    attempt: DaxAttempt,
+    nextAttempts: DaxAttempt[],
+    activeExercise: DaxExercise,
+    skillIds: Set<DaxSkillId>,
+  ) {
+    if (processedCoachAttemptIdsRef.current.has(attempt.id)) {
+      return
+    }
+    processedCoachAttemptIdsRef.current.add(attempt.id)
+
+    cancelActiveCoachRun()
+    const controller = new AbortController()
+    activeCoachControllerRef.current = controller
+    activeCoachAttemptIdRef.current = attempt.id
+    setAgentSupportEvent(null)
+    setCoachInteraction({
+      attemptId: attempt.id,
+      attemptSequenceNumber: attempt.sequenceNumber,
+      status: 'selecting',
+      selectedIntervention: null,
+    })
+
+    const snapshot = buildDaxCoachSnapshot({
+      exercise: activeExercise,
+      currentAttempt: attempt,
+      attempts: nextAttempts,
+      demonstratedSkillIds: skillIds,
+      priorInterventions:
+        priorCoachInterventionsRef.current.get(activeExercise.id) ?? [],
+    })
+    let timedOut = false
+    const timeout = window.setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, DAX_ACTIVE_COACH_TIMEOUT_MS)
+
+    try {
+      const selection = await requestDaxCoachSelection(
+        snapshot,
+        controller.signal,
+      )
+      if (activeCoachAttemptIdRef.current !== attempt.id) {
+        return
+      }
+
+      setCoachInteraction({
+        attemptId: attempt.id,
+        attemptSequenceNumber: attempt.sequenceNumber,
+        status: 'invoking',
+        selectedIntervention: selection.intervention,
+      })
+      coachToolAttemptIdRef.current = attempt.id
+
+      let execution: 'executed' | 'unavailable'
+      try {
+        execution = await executeDaxCoachWebMcp(
+          selection.intervention,
+          activeExercise.id,
+          controller.signal,
+        )
+      } catch {
+        execution = 'unavailable'
+      }
+
+      if (activeCoachAttemptIdRef.current !== attempt.id) {
+        return
+      }
+
+      if (execution === 'unavailable') {
+        setCoachInteraction({
+          attemptId: attempt.id,
+          attemptSequenceNumber: attempt.sequenceNumber,
+          status: 'webmcp_unavailable',
+          selectedIntervention: selection.intervention,
+        })
+        return
+      }
+
+      const interventionHistory =
+        priorCoachInterventionsRef.current.get(activeExercise.id) ?? []
+      priorCoachInterventionsRef.current.set(activeExercise.id, [
+        ...interventionHistory,
+        selection.intervention,
+      ].slice(-4))
+      setCoachInteraction({
+        attemptId: attempt.id,
+        attemptSequenceNumber: attempt.sequenceNumber,
+        status: 'delivered',
+        selectedIntervention: selection.intervention,
+      })
+    } catch {
+      if (
+        activeCoachAttemptIdRef.current !== attempt.id ||
+        (controller.signal.aborted && !timedOut)
+      ) {
+        return
+      }
+
+      setCoachInteraction({
+        attemptId: attempt.id,
+        attemptSequenceNumber: attempt.sequenceNumber,
+        status: 'coach_unavailable',
+        selectedIntervention: null,
+      })
+    } finally {
+      window.clearTimeout(timeout)
+      if (activeCoachAttemptIdRef.current === attempt.id) {
+        activeCoachControllerRef.current = null
+        coachToolAttemptIdRef.current = null
+      }
+    }
+  }
 
   function submitPrediction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -651,7 +897,7 @@ function App() {
       return
     }
 
-    const sequenceNumber = attempts.length + 1
+    const sequenceNumber = attemptsRef.current.length + 1
     const evaluation = evaluateDaxPrediction(exercise, submittedAnswer)
     const attempt: DaxAttempt = {
       id: `${exercise.id}-attempt-${sequenceNumber}`,
@@ -661,12 +907,23 @@ function App() {
       sequenceNumber,
     }
 
-    setAttempts((currentAttempts) => [...currentAttempts, attempt])
+    const nextAttempts = [...attemptsRef.current, attempt]
+    attemptsRef.current = nextAttempts
+    setAttempts(nextAttempts)
     setPrediction('')
     setValidationError('')
 
     if (attempt.result === 'incorrect') {
+      const currentEvidence = deriveDaxLearningEvidence(nextAttempts)
+      void startActiveCoach(
+        attempt,
+        nextAttempts,
+        exercise,
+        getDemonstratedDaxSkillIds(currentEvidence),
+      )
       requestAnimationFrame(() => inputRef.current?.focus())
+    } else {
+      cancelActiveCoachRun()
     }
   }
 
@@ -675,19 +932,30 @@ function App() {
       return
     }
 
-    setCurrentExerciseIndex((index) => index + 1)
+    setCurrentExerciseIndex((index) => {
+      currentExerciseIndexRef.current = index + 1
+      return index + 1
+    })
     setPrediction('')
     setAgentSupportEvent(null)
+    setCoachInteraction(null)
+    cancelActiveCoachRun()
     setValidationError('')
     requestAnimationFrame(() => inputRef.current?.focus())
   }
 
   function resetMission() {
     clearDaxMissionState()
+    cancelActiveCoachRun()
+    attemptsRef.current = []
+    currentExerciseIndexRef.current = 0
+    processedCoachAttemptIdsRef.current.clear()
+    priorCoachInterventionsRef.current.clear()
     setAttempts([])
     setCurrentExerciseIndex(0)
     setPrediction('')
     setAgentSupportEvent(null)
+    setCoachInteraction(null)
     setValidationError('')
     setResetConfirmationOpen(false)
     requestAnimationFrame(() => inputRef.current?.focus())
@@ -934,9 +1202,20 @@ function App() {
             {latestAttempt?.result === 'incorrect' && !supportMatchesLatestAttempt && (
               <p className="agent-capability-hint">
                 <span aria-hidden="true">✦</span>
-                <strong>AI Agent · WebMCP</strong>
-                The evaluated attempt is now observable. A compatible agent may
-                choose bounded assistance; your retry remains the learning action.
+                <strong>Active Learning Coach · WebMCP</strong>
+                {coachInteraction?.attemptId === latestAttempt.id &&
+                coachInteraction.status === 'selecting'
+                  ? 'Selecting bounded assistance from the evaluated learner state.'
+                  : coachInteraction?.attemptId === latestAttempt.id &&
+                      coachInteraction.status === 'invoking'
+                    ? `Invoking ${supportLabels[coachInteraction.selectedIntervention!]} through WebMCP.`
+                    : coachInteraction?.attemptId === latestAttempt.id &&
+                        coachInteraction.status === 'webmcp_unavailable'
+                      ? `${supportLabels[coachInteraction.selectedIntervention!]} was selected, but WebMCP execution is unavailable in this browser.`
+                      : coachInteraction?.attemptId === latestAttempt.id &&
+                          coachInteraction.status === 'coach_unavailable'
+                        ? 'Coach unavailable. You can continue and retry.'
+                        : 'This restored attempt remains observable. A new incorrect submission can activate the coach.'}
               </p>
             )}
 
@@ -980,6 +1259,7 @@ function App() {
           exercise={exercise}
           latestAttempt={latestAttempt}
           supportEvent={agentSupportEvent}
+          coachInteraction={coachInteraction}
           attempts={attempts}
           demonstratedSkillCount={demonstratedSkillIds.size}
           transferDemonstrated={transferDemonstrated}
