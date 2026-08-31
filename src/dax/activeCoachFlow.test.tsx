@@ -44,13 +44,13 @@ function installExecutableWebMcp() {
   const executeTool = vi.fn(
     async (
       registeredTool: WebMCP.RegisteredTool,
-      input: object,
+      input: string,
       options?: { signal?: AbortSignal },
     ) => {
       const tool = registeredTools.find(
         ({ name }) => name === registeredTool.name,
       )!
-      const result = await tool.execute(input as Record<string, unknown>, {
+      const result = await tool.execute(JSON.parse(input), {
         signal: options?.signal ?? new AbortController().signal,
       })
       return JSON.stringify(result)
@@ -200,6 +200,7 @@ describe('embedded DAX Active Learning Coach flow', () => {
       })
       expect(boundary.executeTool).toHaveBeenCalledTimes(1)
       expect(boundary.executeTool.mock.calls[0][0].name).toBe(toolName)
+      expect(boundary.executeTool.mock.calls[0][1]).toBe(JSON.stringify({}))
       expect(support).toHaveTextContent('Active Learning Coach · via WebMCP')
       expect(support).toHaveTextContent(`Selected intervention · ${label}`)
       expect(support).toHaveTextContent('Assistance does not create evidence.')
@@ -313,8 +314,33 @@ describe('embedded DAX Active Learning Coach flow', () => {
 
     await waitFor(() =>
       expect(screen.getByRole('complementary', { name: 'AI Agent live path' }))
-        .toHaveTextContent('WebMCP execution unavailable in this browser'),
+        .toHaveTextContent('WebMCP unavailable in this browser'),
     )
+    expect(
+      screen.queryByRole('region', { name: 'AI Agent intervention' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Your numeric answer')).toBeEnabled()
+  })
+
+  it('distinguishes a native WebMCP execution failure from browser unavailability', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(Response.json({ intervention: 'filter_trace' })),
+    )
+    const boundary = installExecutableWebMcp()
+    boundary.executeTool.mockRejectedValueOnce(new Error('execution failed'))
+    render(<App />)
+    await waitFor(() => expect(boundary.registerTool).toHaveBeenCalledTimes(7))
+
+    await submit(250)
+
+    const rail = screen.getByRole('complementary', {
+      name: 'AI Agent live path',
+    })
+    await waitFor(() =>
+      expect(rail).toHaveTextContent('WebMCP execution failed'),
+    )
+    expect(rail).not.toHaveTextContent('WebMCP unavailable in this browser')
     expect(
       screen.queryByRole('region', { name: 'AI Agent intervention' }),
     ).not.toBeInTheDocument()

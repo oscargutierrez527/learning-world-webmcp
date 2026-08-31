@@ -397,6 +397,7 @@ describe('useDaxWebMcp', () => {
     expect(agentRail).toHaveTextContent(
       'Latest evidence · S1 · S2 · learner Attempt #2',
     )
+    expect(agentRail).toHaveTextContent('Evidence2 / 8 skills')
   })
 
   it('exposes restored state and then the fresh reset state through WebMCP', async () => {

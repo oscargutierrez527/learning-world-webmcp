@@ -127,7 +127,7 @@ describe('DAX Active Learning Coach client contract', () => {
       ).resolves.toBe('executed')
       expect(executeTool).toHaveBeenCalledWith(
         tool,
-        {},
+        JSON.stringify({}),
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       )
     },

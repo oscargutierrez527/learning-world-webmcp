@@ -1120,6 +1120,16 @@ button {
   );
 }
 
+.agent-stage.failed:not(:last-child)::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    #5f4248 0,
+    #5f4248 3px,
+    transparent 3px,
+    transparent 7px
+  );
+}
+
 .agent-stage-marker {
   position: relative;
   z-index: 1;
@@ -1166,6 +1176,12 @@ button {
   border-color: #79525c;
   border-style: dashed;
   color: #c28f9b;
+}
+
+.agent-stage.failed .agent-stage-marker span {
+  border-color: #8f5563;
+  border-style: dashed;
+  color: #d49aaa;
 }
 
 .agent-stage-body {
@@ -1222,7 +1238,8 @@ button {
   color: #81798b;
 }
 
-.agent-stage.unavailable .agent-stage-heading span {
+.agent-stage.unavailable .agent-stage-heading span,
+.agent-stage.failed .agent-stage-heading span {
   color: #c28f9b;
 }
 

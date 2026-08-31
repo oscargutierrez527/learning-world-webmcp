@@ -52,6 +52,7 @@ type AgentStageState =
   | 'waiting'
   | 'not-required'
   | 'unavailable'
+  | 'failed'
 
 const agentStageLabels: Record<AgentStageState, string> = {
   completed: '✓ Completed',
@@ -59,6 +60,7 @@ const agentStageLabels: Record<AgentStageState, string> = {
   waiting: '○ Waiting',
   'not-required': '— Not required',
   unavailable: '— Unavailable',
+  failed: '× Failed',
 }
 
 const supportLabels: Record<DaxSupportMode, string> = {
@@ -454,6 +456,8 @@ function DaxAgentRail({
           : currentCoachInteraction?.status === 'webmcp_unavailable' ||
               currentCoachInteraction?.status === 'coach_unavailable'
             ? 'unavailable'
+            : currentCoachInteraction?.status === 'webmcp_execution_failed'
+              ? 'failed'
             : 'waiting'
   const supportObservedDifferentAttempt = Boolean(
     supportEvent?.observedAttempt &&
@@ -472,6 +476,8 @@ function DaxAgentRail({
             ? `Invoking ${supportLabels[selectedMode]} through WebMCP`
             : currentCoachInteraction?.status === 'webmcp_unavailable' && selectedMode
               ? `${supportLabels[selectedMode]} selected · WebMCP unavailable in this browser`
+              : currentCoachInteraction?.status === 'webmcp_execution_failed' && selectedMode
+                ? `${supportLabels[selectedMode]} selected · WebMCP execution failed`
               : currentCoachInteraction?.status === 'coach_unavailable'
                 ? 'Coach unavailable · learner can continue and retry'
         : support
@@ -615,10 +621,15 @@ function DaxAgentRail({
             <div className="agent-unavailable-callout">
               <strong>
                 {currentCoachInteraction?.status === 'webmcp_unavailable'
-                  ? 'WebMCP execution unavailable in this browser'
+                  ? 'WebMCP unavailable in this browser'
                   : 'No assistance was delivered'}
               </strong>
               <small>Learner can continue and retry.</small>
+            </div>
+          ) : assistState === 'failed' ? (
+            <div className="agent-unavailable-callout">
+              <strong>WebMCP execution failed</strong>
+              <small>The learner can continue and retry.</small>
             </div>
           ) : (
             <p>Waiting for an agent capability invocation</p>
@@ -827,15 +838,18 @@ function App() {
       })
       coachToolAttemptIdRef.current = attempt.id
 
-      let execution: 'executed' | 'unavailable'
+      let execution: 'executed' | 'unavailable' | 'execution_failed'
       try {
         execution = await executeDaxCoachWebMcp(
           selection.intervention,
           activeExercise.id,
           controller.signal,
         )
-      } catch {
-        execution = 'unavailable'
+      } catch (error) {
+        if (controller.signal.aborted) {
+          throw error
+        }
+        execution = 'execution_failed'
       }
 
       if (activeCoachAttemptIdRef.current !== attempt.id) {
@@ -847,6 +861,16 @@ function App() {
           attemptId: attempt.id,
           attemptSequenceNumber: attempt.sequenceNumber,
           status: 'webmcp_unavailable',
+          selectedIntervention: selection.intervention,
+        })
+        return
+      }
+
+      if (execution === 'execution_failed') {
+        setCoachInteraction({
+          attemptId: attempt.id,
+          attemptSequenceNumber: attempt.sequenceNumber,
+          status: 'webmcp_execution_failed',
           selectedIntervention: selection.intervention,
         })
         return
@@ -1210,8 +1234,11 @@ function App() {
                       coachInteraction.status === 'invoking'
                     ? `Invoking ${supportLabels[coachInteraction.selectedIntervention!]} through WebMCP.`
                     : coachInteraction?.attemptId === latestAttempt.id &&
-                        coachInteraction.status === 'webmcp_unavailable'
-                      ? `${supportLabels[coachInteraction.selectedIntervention!]} was selected, but WebMCP execution is unavailable in this browser.`
+                      coachInteraction.status === 'webmcp_unavailable'
+                      ? `${supportLabels[coachInteraction.selectedIntervention!]} was selected, but WebMCP is unavailable in this browser.`
+                      : coachInteraction?.attemptId === latestAttempt.id &&
+                          coachInteraction.status === 'webmcp_execution_failed'
+                        ? `${supportLabels[coachInteraction.selectedIntervention!]} was selected, but WebMCP execution failed. You can continue and retry.`
                       : coachInteraction?.attemptId === latestAttempt.id &&
                           coachInteraction.status === 'coach_unavailable'
                         ? 'Coach unavailable. You can continue and retry.'

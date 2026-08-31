@@ -22,6 +22,7 @@ export type DaxCoachInteractionStatus =
   | 'delivered'
   | 'coach_unavailable'
   | 'webmcp_unavailable'
+  | 'webmcp_execution_failed'
 
 export interface DaxCoachInteraction {
   attemptId: string
@@ -35,6 +36,7 @@ export class DaxCoachPipelineError extends Error {
       | 'coach_unavailable'
       | 'invalid_selection'
       | 'invalid_tool_result'
+      | 'webmcp_execution_failed'
 
   constructor(code: DaxCoachPipelineError['code']) {
     super(code)
@@ -47,7 +49,7 @@ interface DaxExecutableModelContext {
   getTools(): Promise<WebMCP.RegisteredTool[]>
   executeTool(
     tool: WebMCP.RegisteredTool,
-    inputObject?: object,
+    inputJson?: string,
     options?: { signal?: AbortSignal },
   ): Promise<unknown>
 }
@@ -202,12 +204,12 @@ export async function executeDaxCoachWebMcp(
       tool.name === toolName && tool.origin === window.location.origin,
   )
   if (!selectedTool) {
-    return 'unavailable'
+    throw new DaxCoachPipelineError('webmcp_execution_failed')
   }
 
   const serializedResult = await modelContext.executeTool(
     selectedTool,
-    {},
+    JSON.stringify({}),
     { signal },
   )
   let result = serializedResult
