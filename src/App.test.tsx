@@ -2,6 +2,7 @@
 
 import '@testing-library/jest-dom/vitest'
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -22,6 +23,36 @@ import type { DaxAttempt } from './dax/types'
 const expectedAnswers = [
   450, 300, 300, 250, 250, 150, 50, 250, 500, 450, 200, 300,
 ]
+
+function createPreFinalThirtyTwoAttemptMission(): DaxAttempt[] {
+  const attempts: DaxAttempt[] = []
+
+  function addAttempt(
+    exerciseIndex: number,
+    submittedAnswer: number,
+    result: DaxAttempt['result'],
+  ) {
+    const exercise = daxExercises[exerciseIndex]
+    const sequenceNumber = attempts.length + 1
+    attempts.push({
+      id: `${exercise.id}-attempt-${sequenceNumber}`,
+      exerciseId: exercise.id,
+      submittedAnswer,
+      result,
+      sequenceNumber,
+    })
+  }
+
+  for (let exerciseIndex = 0; exerciseIndex < 10; exerciseIndex += 1) {
+    addAttempt(exerciseIndex, expectedAnswers[exerciseIndex] + 1, 'incorrect')
+    addAttempt(exerciseIndex, expectedAnswers[exerciseIndex] + 2, 'incorrect')
+    addAttempt(exerciseIndex, expectedAnswers[exerciseIndex], 'correct')
+  }
+
+  addAttempt(10, expectedAnswers[10], 'correct')
+  addAttempt(11, expectedAnswers[11] + 1, 'incorrect')
+  return attempts
+}
 
 async function solveCurrentExercise(
   user: ReturnType<typeof userEvent.setup>,
@@ -480,4 +511,119 @@ describe('DAX learner attempt flow', () => {
       ).getAllByRole('listitem'),
     ).toHaveLength(12)
   }, 20000)
+
+  it('keeps every authoritative final-mission surface consistent with a realistic 33-attempt history', async () => {
+    const user = userEvent.setup()
+    persistDaxMissionState(createPreFinalThirtyTwoAttemptMission(), 'DAX-12')
+    render(<App />)
+
+    await solveCurrentExercise(user, 300)
+
+    expect(
+      screen.getByText('DAX-12', { selector: '.exercise-id span' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Mastery demonstrated' }),
+    ).toBeInTheDocument()
+
+    const missionStatus = screen.getByLabelText('Mission status')
+    expect(missionStatus).toHaveTextContent('Exercise12 / 12')
+    expect(missionStatus).toHaveTextContent('Skills8 / 8')
+    expect(missionStatus).toHaveTextContent('TransferDemonstrated')
+
+    const rail = screen.getByRole('complementary', {
+      name: 'AI Agent live path',
+    })
+    expect(rail).toHaveTextContent('Learner attempts33')
+    expect(rail).toHaveTextContent('Evidence8 / 8 skills')
+    expect(rail).toHaveTextContent('TransferDemonstrated')
+    expect(rail).toHaveTextContent('MasteryDemonstrated')
+
+    expect(screen.getByText('12/12 exercises · 8/8 skills')).toBeInTheDocument()
+    await user.click(screen.getByText('View mission progress'))
+    const exerciseItems = within(
+      screen.getByRole('list', { name: 'Exercise sequence' }),
+    ).getAllByRole('listitem')
+    expect(exerciseItems).toHaveLength(12)
+    exerciseItems.forEach((item) => expect(item).toHaveTextContent('✓'))
+    expect(exerciseItems.at(-1)).toHaveTextContent('DAX-12Current')
+
+    const skillItems = within(
+      screen.getByRole('list', { name: 'Required DAX skills' }),
+    ).getAllByRole('listitem')
+    expect(skillItems).toHaveLength(8)
+    skillItems.forEach((item) => expect(item).toHaveTextContent('Demonstrated'))
+
+    expect(screen.getByText('33 recorded')).toBeInTheDocument()
+    const renderedAttempts = within(
+      screen.getByRole('region', { name: 'Attempt history' }),
+    ).getAllByRole('listitem')
+    expect(renderedAttempts).toHaveLength(33)
+    expect(renderedAttempts.at(-1)).toHaveTextContent(
+      'Attempt #33DAX-12300Correct',
+    )
+  }, 20000)
+
+  it('keeps all 11 next-exercise transitions bounded under repeated activation', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    for (let exerciseIndex = 0; exerciseIndex < 11; exerciseIndex += 1) {
+      await solveCurrentExercise(user, expectedAnswers[exerciseIndex])
+      const nextButton = screen.getByRole('button', {
+        name: `Continue to exercise ${exerciseIndex + 2}`,
+      })
+      document.documentElement.scrollTop = 900
+      act(() => {
+        nextButton.click()
+        nextButton.click()
+      })
+
+      expect(
+        screen.getByText(`DAX-${String(exerciseIndex + 2).padStart(2, '0')}`, {
+          selector: '.exercise-id span',
+        }),
+      ).toBeInTheDocument()
+      await waitFor(() => expect(document.documentElement.scrollTop).toBe(0))
+    }
+
+    await solveCurrentExercise(user, expectedAnswers[11])
+    expect(
+      screen.getByRole('heading', { name: 'Mastery demonstrated' }),
+    ).toBeInTheDocument()
+    expect(
+      within(
+        screen.getByRole('region', { name: 'Attempt history' }),
+      ).getAllByRole('listitem'),
+    ).toHaveLength(12)
+  }, 25000)
+
+  it('resets an in-flight incorrect attempt atomically and restores fresh state on remount', async () => {
+    const user = userEvent.setup()
+    const view = render(<App />)
+
+    await solveCurrentExercise(user, 250)
+    document.documentElement.scrollTop = 900
+    await user.click(screen.getByRole('button', { name: 'Reset mission' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm reset' }))
+
+    expect(screen.getByLabelText('Mission status')).toHaveTextContent(
+      'Exercise1 / 12Skills0 / 8TransferPending',
+    )
+    expect(
+      screen.queryByRole('region', { name: 'Attempt history' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: 'AI Agent intervention' }),
+    ).not.toBeInTheDocument()
+    await waitFor(() => expect(document.documentElement.scrollTop).toBe(0))
+
+    view.unmount()
+    render(<App />)
+    expect(
+      screen.getByText('DAX-01', { selector: '.exercise-id span' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('0/12 exercises · 0/8 skills')).toBeInTheDocument()
+    expect(localStorage.getItem(DAX_MISSION_STORAGE_KEY)).toBeNull()
+  })
 })

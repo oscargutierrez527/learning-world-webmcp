@@ -280,6 +280,101 @@ describe('embedded DAX Active Learning Coach flow', () => {
     expect(boundary.executeTool).toHaveBeenCalledTimes(1)
   })
 
+  it('cannot attach a stale coach completion after learner success and navigation', async () => {
+    let resolveSelection: ((response: Response) => void) | undefined
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveSelection = resolve
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const boundary = installExecutableWebMcp()
+    render(<App />)
+    await waitFor(() => expect(boundary.registerTool).toHaveBeenCalledTimes(7))
+
+    await submit(250)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    await submit(450)
+    await userEvent.setup().click(
+      screen.getByRole('button', { name: 'Continue to exercise 2' }),
+    )
+    resolveSelection?.(Response.json({ intervention: 'filter_trace' }))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('DAX-02', { selector: '.exercise-id span' }),
+      ).toBeInTheDocument(),
+    )
+    expect(boundary.executeTool).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('region', { name: 'AI Agent intervention' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Mission status')).toHaveTextContent(
+      'Exercise2 / 12Skills2 / 8TransferPending',
+    )
+  })
+
+  it('cannot attach a stale coach completion after mission reset', async () => {
+    let resolveSelection: ((response: Response) => void) | undefined
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveSelection = resolve
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const boundary = installExecutableWebMcp()
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(boundary.registerTool).toHaveBeenCalledTimes(7))
+
+    await submit(250)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    await user.click(screen.getByRole('button', { name: 'Reset mission' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm reset' }))
+    resolveSelection?.(Response.json({ intervention: 'explanation' }))
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Mission status')).toHaveTextContent(
+        'Exercise1 / 12Skills0 / 8TransferPending',
+      ),
+    )
+    expect(boundary.executeTool).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('region', { name: 'Attempt history' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: 'AI Agent intervention' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('clears delivered assistance and authoritative state on reset', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(Response.json({ intervention: 'socratic' })),
+    )
+    installExecutableWebMcp()
+    const user = userEvent.setup()
+    render(<App />)
+
+    await submit(250)
+    await screen.findByText('Selected intervention · Socratic')
+    await user.click(screen.getByRole('button', { name: 'Reset mission' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm reset' }))
+
+    expect(screen.getByLabelText('Mission status')).toHaveTextContent(
+      'Exercise1 / 12Skills0 / 8TransferPending',
+    )
+    expect(
+      screen.queryByRole('region', { name: 'AI Agent intervention' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: 'Attempt history' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Commit to a result' })).toBeVisible()
+  })
+
   it('keeps the mission usable when coach selection fails', async () => {
     const fetchMock = vi
       .fn()

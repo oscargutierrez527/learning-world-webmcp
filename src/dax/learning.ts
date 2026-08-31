@@ -26,6 +26,18 @@ export const requiredDaxSkills: DaxSkill[] = [
   },
 ]
 
+export interface DaxLearningState {
+  attemptCount: number
+  evidence: DaxLearningEvidence[]
+  solvedExerciseIds: Set<string>
+  solvedExerciseCount: number
+  demonstratedSkillIds: Set<DaxSkillId>
+  demonstratedSkillCount: number
+  transferDemonstrated: boolean
+  missionMastered: boolean
+  missionComplete: boolean
+}
+
 export function deriveDaxLearningEvidence(
   attempts: DaxAttempt[],
 ): DaxLearningEvidence[] {
@@ -66,4 +78,33 @@ export function isDaxMissionMastered(
   )
 
   return allRequiredSkillsDemonstrated && transferDemonstrated
+}
+
+export function deriveDaxLearningState(
+  attempts: DaxAttempt[],
+): DaxLearningState {
+  const evidence = deriveDaxLearningEvidence(attempts)
+  const solvedExerciseIds = new Set(
+    attempts
+      .filter(({ result }) => result === 'correct')
+      .map(({ exerciseId }) => exerciseId),
+  )
+  const demonstratedSkillIds = getDemonstratedDaxSkillIds(evidence)
+  const transferDemonstrated = evidence.some(
+    ({ exerciseId }) => exerciseId === 'DAX-12',
+  )
+  const missionMastered = isDaxMissionMastered(evidence)
+
+  return {
+    attemptCount: attempts.length,
+    evidence,
+    solvedExerciseIds,
+    solvedExerciseCount: solvedExerciseIds.size,
+    demonstratedSkillIds,
+    demonstratedSkillCount: demonstratedSkillIds.size,
+    transferDemonstrated,
+    missionMastered,
+    missionComplete:
+      missionMastered && solvedExerciseIds.size === daxExercises.length,
+  }
 }

@@ -11,9 +11,7 @@ import type { DaxCoachIntervention } from './dax/activeCoachContract'
 import { evaluateDaxPrediction } from './dax/evaluation'
 import { daxExercises } from './dax/exercise'
 import {
-  deriveDaxLearningEvidence,
-  getDemonstratedDaxSkillIds,
-  isDaxMissionMastered,
+  deriveDaxLearningState,
   requiredDaxSkills,
 } from './dax/learning'
 import { identifyDaxMisconception } from './dax/misconceptions'
@@ -388,7 +386,7 @@ function DaxAgentRail({
   latestAttempt,
   supportEvent,
   coachInteraction,
-  attempts,
+  attemptCount,
   demonstratedSkillCount,
   transferDemonstrated,
   missionMastered,
@@ -398,7 +396,7 @@ function DaxAgentRail({
   latestAttempt: DaxAttempt | undefined
   supportEvent: DaxAgentSupportEvent | null
   coachInteraction: DaxCoachInteraction | null
-  attempts: DaxAttempt[]
+  attemptCount: number
   demonstratedSkillCount: number
   transferDemonstrated: boolean
   missionMastered: boolean
@@ -654,7 +652,7 @@ function DaxAgentRail({
         <dl>
           <div>
             <dt>Learner attempts</dt>
-            <dd>{attempts.length}</dd>
+            <dd>{attemptCount}</dd>
           </div>
           <div>
             <dt>Evidence</dt>
@@ -748,22 +746,20 @@ function App() {
   const exerciseComplete = currentExerciseAttempts.some(
     ({ result }) => result === 'correct',
   )
-  const solvedExerciseIds = new Set(
-    attempts
-      .filter(({ result }) => result === 'correct')
-      .map(({ exerciseId }) => exerciseId),
-  )
-  const evidence = deriveDaxLearningEvidence(attempts)
-  const demonstratedSkillIds = getDemonstratedDaxSkillIds(evidence)
-  const transferDemonstrated = evidence.some(
-    ({ exerciseId }) => exerciseId === 'DAX-12',
-  )
-  const missionMastered = isDaxMissionMastered(evidence)
-  const missionComplete =
-    missionMastered && solvedExerciseIds.size === daxExercises.length
+  const learningState = deriveDaxLearningState(attempts)
+  const {
+    solvedExerciseIds,
+    demonstratedSkillIds,
+    transferDemonstrated,
+    missionMastered,
+    missionComplete,
+  } = learningState
 
   useDaxWebMcp({ currentExerciseIndex, attempts }, (support) => {
     const activeExercise = daxExercises[currentExerciseIndexRef.current]
+    if (!activeExercise || support.exerciseId !== activeExercise.id) {
+      return
+    }
     const coachAttemptId = coachToolAttemptIdRef.current
     const observedAttempt = coachAttemptId
       ? attemptsRef.current.find(({ id }) => id === coachAttemptId) ?? null
@@ -782,6 +778,14 @@ function App() {
     activeCoachControllerRef.current = null
     activeCoachAttemptIdRef.current = null
     coachToolAttemptIdRef.current = null
+  }
+
+  function focusCurrentExercise() {
+    requestAnimationFrame(() => {
+      document.documentElement.scrollTop = 0
+      document.body.scrollTop = 0
+      inputRef.current?.focus({ preventScroll: true })
+    })
   }
 
   async function startActiveCoach(
@@ -938,12 +942,12 @@ function App() {
     setValidationError('')
 
     if (attempt.result === 'incorrect') {
-      const currentEvidence = deriveDaxLearningEvidence(nextAttempts)
+      const nextLearningState = deriveDaxLearningState(nextAttempts)
       void startActiveCoach(
         attempt,
         nextAttempts,
         exercise,
-        getDemonstratedDaxSkillIds(currentEvidence),
+        nextLearningState.demonstratedSkillIds,
       )
       requestAnimationFrame(() => inputRef.current?.focus())
     } else {
@@ -956,16 +960,15 @@ function App() {
       return
     }
 
-    setCurrentExerciseIndex((index) => {
-      currentExerciseIndexRef.current = index + 1
-      return index + 1
-    })
+    const nextExerciseIndex = currentExerciseIndex + 1
+    currentExerciseIndexRef.current = nextExerciseIndex
+    setCurrentExerciseIndex(nextExerciseIndex)
     setPrediction('')
     setAgentSupportEvent(null)
     setCoachInteraction(null)
     cancelActiveCoachRun()
     setValidationError('')
-    requestAnimationFrame(() => inputRef.current?.focus())
+    focusCurrentExercise()
   }
 
   function resetMission() {
@@ -982,7 +985,7 @@ function App() {
     setCoachInteraction(null)
     setValidationError('')
     setResetConfirmationOpen(false)
-    requestAnimationFrame(() => inputRef.current?.focus())
+    focusCurrentExercise()
   }
 
   const support = agentSupportEvent?.support
@@ -1063,7 +1066,9 @@ function App() {
             </p>
             <p>
               <span>Skills</span>
-              <strong>{demonstratedSkillIds.size} / {requiredDaxSkills.length}</strong>
+              <strong>
+                {learningState.demonstratedSkillCount} / {requiredDaxSkills.length}
+              </strong>
             </p>
             <p>
               <span>Transfer</span>
@@ -1287,8 +1292,8 @@ function App() {
           latestAttempt={latestAttempt}
           supportEvent={agentSupportEvent}
           coachInteraction={coachInteraction}
-          attempts={attempts}
-          demonstratedSkillCount={demonstratedSkillIds.size}
+          attemptCount={learningState.attemptCount}
+          demonstratedSkillCount={learningState.demonstratedSkillCount}
           transferDemonstrated={transferDemonstrated}
           missionMastered={missionMastered}
           missionComplete={missionComplete}
@@ -1300,8 +1305,8 @@ function App() {
           <summary>
             <span>View mission progress</span>
             <small>
-              {solvedExerciseIds.size}/{daxExercises.length} exercises ·{' '}
-              {demonstratedSkillIds.size}/{requiredDaxSkills.length} skills
+              {learningState.solvedExerciseCount}/{daxExercises.length} exercises ·{' '}
+              {learningState.demonstratedSkillCount}/{requiredDaxSkills.length} skills
             </small>
           </summary>
           <div className="mission-detail-content">
@@ -1357,11 +1362,11 @@ function App() {
           </div>
         </details>
 
-        {attempts.length > 0 && (
+        {learningState.attemptCount > 0 && (
           <details className="attempt-history-details">
             <summary>
               <span>Attempt history</span>
-              <small>{attempts.length} recorded</small>
+              <small>{learningState.attemptCount} recorded</small>
             </summary>
             <section
               className="attempt-history"
