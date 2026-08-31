@@ -213,7 +213,7 @@ describe('useDaxWebMcp', () => {
     expect(agentRail).toHaveTextContent('Select intervention✓ Completed')
     expect(agentRail).toHaveTextContent('Assist✓ Completed')
     expect(agentRail).toHaveTextContent('Selected by AI Agent · via WebMCP')
-    expect(agentRail).toHaveTextContent('ALL(Sales[Region])')
+    expect(agentRail).not.toHaveTextContent('ALL(Sales[Region])')
     expect(supportRegion).toHaveTextContent('via WebMCP')
     expect(supportRegion).toHaveTextContent(
       'Assistance does not create evidence.',
@@ -248,10 +248,13 @@ describe('useDaxWebMcp', () => {
     expect(agentRail).toHaveTextContent('Select intervention✓ Completed')
     expect(agentRail).toHaveTextContent('Assist✓ Completed')
     expect(agentRail).toHaveTextContent('Selected by AI Agent · via WebMCP')
-    expect(agentRail).toHaveTextContent(
+    expect(agentRail).not.toHaveTextContent(
       'CALCULATE evaluates its expression in a modified filter context',
     )
     expect(supportRegion).toHaveTextContent('via WebMCP')
+    expect(supportRegion).toHaveTextContent(
+      'CALCULATE evaluates its expression in a modified filter context',
+    )
     await expect(
       Promise.resolve(historyTool!.execute({}, executeOptions)),
     ).resolves.toEqual({ empty: true, attempts: [] })
@@ -281,7 +284,9 @@ describe('useDaxWebMcp', () => {
     expect(agentRail).toHaveTextContent('Select intervention✓ Completed')
     expect(agentRail).toHaveTextContent('Assist✓ Completed')
     expect(agentRail).toHaveTextContent('Selected by AI Agent · via WebMCP')
-    expect(agentRail).toHaveTextContent('Before filters')
+    expect(agentRail).not.toHaveTextContent('Before filters')
+    expect(agentRail).toHaveTextContent('request_filter_trace')
+    expect(supportRegion).toHaveTextContent('Before filters')
     expect(supportRegion).toHaveTextContent('Region = East')
     expect(supportRegion).toHaveTextContent('ALL(Sales[Region])')
     await expect(
@@ -390,7 +395,7 @@ describe('useDaxWebMcp', () => {
 
     expect(agentRail).toHaveTextContent('Select intervention✓ Completed')
     expect(agentRail).toHaveTextContent('Assist✓ Completed')
-    expect(agentRail).toHaveTextContent('delivered for Attempt #1')
+    expect(agentRail).toHaveTextContent('Delivered for Attempt #1')
     expect(agentRail).toHaveTextContent(
       'Evidence established from learner Attempt #2',
     )

@@ -173,12 +173,40 @@ describe('embedded DAX Active Learning Coach flow', () => {
   })
 
   it.each([
-    ['socratic', 'request_socratic_intervention', 'Socratic'],
-    ['explanation', 'request_explanation', 'Explanation'],
-    ['filter_trace', 'request_filter_trace', 'Filter trace'],
+    [
+      'socratic',
+      'request_socratic_intervention',
+      'Socratic',
+      'assistance-socratic',
+      '.socratic-support blockquote',
+      '?',
+    ],
+    [
+      'explanation',
+      'request_explanation',
+      'Explanation',
+      'assistance-explanation',
+      '.explanation-support .support-copy',
+      '▤',
+    ],
+    [
+      'filter_trace',
+      'request_filter_trace',
+      'Filter trace',
+      'assistance-filter_trace',
+      '.filter-trace-content',
+      '→',
+    ],
   ] as const)(
     'binds %s selection to the real %s WebMCP result and rail',
-    async (intervention, toolName, label) => {
+    async (
+      intervention,
+      toolName,
+      label,
+      supportClass,
+      contentSelector,
+      identityMarker,
+    ) => {
       vi.stubGlobal(
         'fetch',
         vi.fn().mockResolvedValue(Response.json({ intervention })),
@@ -203,13 +231,23 @@ describe('embedded DAX Active Learning Coach flow', () => {
       expect(boundary.executeTool.mock.calls[0][1]).toBe(JSON.stringify({}))
       expect(support).toHaveTextContent('Active Learning Coach · via WebMCP')
       expect(support).toHaveTextContent(`Selected intervention · ${label}`)
-      expect(support).toHaveTextContent('Assistance does not create evidence.')
-      expect(within(capabilities).getByText(label).closest('li')).toHaveClass(
-        'selected',
+      expect(support).toHaveClass(supportClass)
+      expect(support).toHaveAttribute('data-support-mode', intervention)
+      expect(support.querySelector('.support-mode-icon')).toHaveTextContent(
+        identityMarker,
       )
+      expect(support.querySelector(contentSelector)).toBeInTheDocument()
+      expect(support).toHaveTextContent('Assistance does not create evidence.')
+      const selectedCapability = within(capabilities).getByText(label).closest('li')
+      expect(selectedCapability).toHaveClass('selected')
+      expect(selectedCapability).toHaveClass(`support-mode-${intervention}`)
+      expect(selectedCapability).toHaveAttribute('data-selected', 'true')
       expect(rail).toHaveTextContent('Selected by Active Learning Coach')
       expect(rail).toHaveTextContent('Assist✓ Completed')
       expect(rail).toHaveTextContent('Via WebMCP')
+      expect(rail).toHaveTextContent(toolName)
+      expect(rail.querySelector('.support-copy')).not.toBeInTheDocument()
+      expect(rail.querySelector('.filter-trace-content')).not.toBeInTheDocument()
       expect(
         within(
           screen.getByRole('region', { name: 'Attempt history' }),
@@ -466,7 +504,7 @@ describe('embedded DAX Active Learning Coach flow', () => {
     })
     expect(evaluation).toHaveTextContent('Attempt #2')
     expect(evaluation).toHaveTextContent('Evidence establishedS1 · S2')
-    expect(rail).toHaveTextContent('delivered for Attempt #1')
+    expect(rail).toHaveTextContent('Delivered for Attempt #1')
     expect(rail).toHaveTextContent('Evidence established from learner Attempt #2')
     expect(rail).toHaveTextContent('Evidence2 / 8 skills')
   })

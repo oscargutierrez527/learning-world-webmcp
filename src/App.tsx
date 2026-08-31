@@ -67,6 +67,36 @@ const supportLabels: Record<DaxSupportMode, string> = {
   filter_trace: 'Filter trace',
 }
 
+const supportIcons: Record<DaxSupportMode, string> = {
+  socratic: '?',
+  explanation: '▤',
+  filter_trace: '→',
+}
+
+const supportKickers: Record<DaxSupportMode, string> = {
+  socratic: 'Think about this',
+  explanation: 'Concept',
+  filter_trace: 'Trace the context',
+}
+
+const supportRetryCues: Record<DaxSupportMode, string> = {
+  socratic: 'Reflect → Retry',
+  explanation: 'Apply the concept → Retry',
+  filter_trace: 'Follow the trace → Retry',
+}
+
+const supportToolNames: Record<DaxSupportMode, string> = {
+  socratic: 'request_socratic_intervention',
+  explanation: 'request_explanation',
+  filter_trace: 'request_filter_trace',
+}
+
+const supportDeliverySummaries: Record<DaxSupportMode, string> = {
+  socratic: 'Governed question delivered',
+  explanation: 'Concept explanation delivered',
+  filter_trace: '3 trace stages delivered',
+}
+
 const supportModes: DaxSupportMode[] = [
   'socratic',
   'explanation',
@@ -255,20 +285,17 @@ function DaxEvaluationEvent({
             <small>Created by the learner's evaluated attempt.</small>
           </div>
         ) : (
-          <div className="incorrect-guidance">
-            <p className="deterministic-feedback">{exercise.incorrectFeedback}</p>
-            {possibleMisconception && (
-              <div
-                className="possible-misconception"
-                role="note"
-                aria-label="Possible misconception"
-              >
-                <span>Possible misconception · {possibleMisconception.id}</span>
-                <strong>{possibleMisconception.label}</strong>
-                <small>Compatible pattern · not a diagnosis</small>
-              </div>
-            )}
-          </div>
+          possibleMisconception && (
+            <div
+              className="possible-misconception"
+              role="note"
+              aria-label="Possible misconception"
+            >
+              <span>Possible misconception · {possibleMisconception.id}</span>
+              <strong>{possibleMisconception.label}</strong>
+              <small>Compatible pattern · not a diagnosis</small>
+            </div>
+          )
         )}
       </div>
     </section>
@@ -277,7 +304,21 @@ function DaxEvaluationEvent({
 
 function DaxSupportContent({ support }: { support: DaxAgentSupport }) {
   if (support.type !== 'filter_trace') {
-    return <p className="support-copy">{support.text}</p>
+    if (support.type === 'socratic') {
+      return (
+        <div className="socratic-support">
+          <p className="support-section-label">Think about this</p>
+          <blockquote>{support.text}</blockquote>
+        </div>
+      )
+    }
+
+    return (
+      <div className="explanation-support">
+        <p className="support-section-label">Concept</p>
+        <p className="support-copy">{support.text}</p>
+      </div>
+    )
   }
 
   return (
@@ -328,7 +369,8 @@ function DaxDeliveredAssistance({ event }: { event: DaxAgentSupportEvent }) {
 
   return (
     <section
-      className="loop-event delivered-assistance"
+      className={`loop-event delivered-assistance assistance-${event.support.type}`}
+      data-support-mode={event.support.type}
       aria-label="AI Agent intervention"
       aria-live="polite"
     >
@@ -342,10 +384,20 @@ function DaxDeliveredAssistance({ event }: { event: DaxAgentSupportEvent }) {
         </p>
       </div>
       <div className="delivered-support-body">
+        <header className="support-mode-heading">
+          <span className="support-mode-icon" aria-hidden="true">
+            {supportIcons[event.support.type]}
+          </span>
+          <div>
+            <small>{supportKickers[event.support.type]}</small>
+            <h3>{supportLabels[event.support.type]}</h3>
+          </div>
+        </header>
         <DaxSupportContent support={event.support} />
-        <p className="support-authority">
-          Assistance does not create evidence.
-        </p>
+        <footer className="support-footer">
+          <strong>{supportRetryCues[event.support.type]}</strong>
+          <span>Assistance does not create evidence.</span>
+        </footer>
       </div>
     </section>
   )
@@ -578,8 +630,17 @@ function DaxAgentRail({
                 {supportModes.map((mode) => {
                   const selected = selectedMode === mode
                   return (
-                    <li key={mode} className={selected ? 'selected' : ''}>
-                      <span aria-hidden="true">{selected ? '●' : '○'}</span>
+                    <li
+                      key={mode}
+                      className={`support-mode-${mode}${selected ? ' selected' : ''}`}
+                      data-selected={selected ? 'true' : 'false'}
+                    >
+                      <span className="mode-selection-mark" aria-hidden="true">
+                        {selected ? '●' : '○'}
+                      </span>
+                      <span className="mode-identity-mark" aria-hidden="true">
+                        {supportIcons[mode]}
+                      </span>
                       <strong>{supportLabels[mode]}</strong>
                     </li>
                   )
@@ -598,15 +659,19 @@ function DaxAgentRail({
 
         <AgentTraceStage number="4" label="Assist" state={assistState}>
           {support ? (
-            <div className="rail-assistance">
-              <p>
-                <strong>{supportLabels[support.type]}</strong>
-                {supportObservedDifferentAttempt &&
-                  supportEvent?.observedAttempt &&
-                  ` · delivered for Attempt #${supportEvent.observedAttempt.sequenceNumber}`}
-              </p>
-              <small className="rail-via-webmcp">Via WebMCP</small>
-              <DaxSupportContent support={support} />
+            <div
+              className={`rail-assistance rail-assistance-${support.type}`}
+              data-support-mode={support.type}
+            >
+              <code>{supportToolNames[support.type]}</code>
+              <strong>Via WebMCP</strong>
+              <span>{supportDeliverySummaries[support.type]}</span>
+              {supportEvent?.observedAttempt && (
+                <small>
+                  Delivered for Attempt #{supportEvent.observedAttempt.sequenceNumber}
+                  {supportObservedDifferentAttempt ? ' · prior learner state' : ''}
+                </small>
+              )}
             </div>
           ) : assistState === 'not-required' ? (
             <p>Exercise solved before any intervention was invoked.</p>
